@@ -46,3 +46,8 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Django
+db.sqlite3
+backend/db.sqlite3
+backend/config/db.sqlite3
