@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+venv/
+.venv/
+backend/venv/
+
+# Django
+db.sqlite3
+backend/db.sqlite3
+backend/config/db.sqlite3
+
+# AI output
+ai/runs/
+
+# React
+frontend/node_modules/
+
+# Environment variables
+.env
+
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
