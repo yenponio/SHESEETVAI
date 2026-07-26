@@ -113,3 +113,48 @@ th {
     color: red;
     font-weight: bold;
 }
+.table-header {
+
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+}
+
+
+.table-header button {
+
+    background: #7b1113;
+    color: white;
+
+    border: none;
+    padding: 10px 20px;
+
+    border-radius: 8px;
+
+    cursor: pointer;
+
+    font-weight: bold;
+
+}
+
+
+.table-header button:hover {
+
+    background: #5c0d0f;
+
+}
+.back-button {
+    background: #7b1113;
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    margin-top: 10px;
+}
+
+.back-button:hover {
+    background: #5e0d0f;
+}

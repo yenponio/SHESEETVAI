@@ -1,164 +1,283 @@
 import "./../styles/Dashboard.css";
 import { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
-
+import { useNavigate } from "react-router-dom";
 import SearchBar from "../components/dashboard/SearchBar";
 import StatCard from "../components/dashboard/StatCard";
 import CollegeChart from "../components/dashboard/CollegeChart";
 import ComplianceChart from "../components/dashboard/ComplianceChart";
+
 import {
   FaUserGraduate,
   FaClock,
   FaCalendarAlt,
 } from "react-icons/fa";
 
-function Dashboard() {
-  const [dashboardData, setDashboardData] = useState(null);
 
-  const students = [
-    {
-      studentNumber: "20969752",
-      name: "Ishii, Yuichiro L.",
-      college: "CCJEF",
-      status: "Access Granted",
-    },
-    {
-      studentNumber: "20957815",
-      name: "Muldong, Geyser Ardin S.",
-      college: "SEA",
-      status: "Dress Code Violation",
-    },
-    {
-      studentNumber: "20950773",
-      name: "Santos, Raynier Ronn G.",
-      college: "SHTM",
-      status: "Access Granted",
-    },
-    {
-      studentNumber: "20952281",
-      name: "Cayanan, Jerica Therese F.",
-      college: "SE",
-      status: "Access Granted",
-    },
-    {
-      studentNumber: "20959288",
-      name: "Jose, Chloe Lane B.",
-      college: "SC",
-      status: "Dress Code Violation",
-    },
-    {
-      studentNumber: "20550881",
-      name: "Punsalan, Jeneveve S.",
-      college: "SNAMS",
-      status: "Access Granted",
-    },
-    {
-      studentNumber: "20968222",
-      name: "Tapnio, Patricia Lei R.",
-      college: "SAS",
-      status: "Dress Code Violation",
-    },
-    {
-      studentNumber: "20951987",
-      name: "Ponio, Jennesie Erin L.",
-      college: "SBA",
-      status: "Access Granted",
-    },
-  ];
+function Dashboard() {
+  const navigate = useNavigate();
+  const [dashboardData, setDashboardData] = useState(null);
+  const [search, setSearch] = useState("");
+
 
   useEffect(() => {
+
     async function fetchDashboard() {
-      const response = await fetch(
-        "http://127.0.0.1:8000/api/students/dashboard/"
-      );
 
-      const data = await response.json();
+      try {
 
-      console.log(data);
+        const response = await fetch(
+          "http://127.0.0.1:8000/api/students/dashboard/"
+        );
 
-      setDashboardData(data);
+        const data = await response.json();
+
+        setDashboardData(data);
+
+      } catch (error) {
+
+        console.error(
+          "Dashboard error:",
+          error
+        );
+
+      }
+
     }
 
     fetchDashboard();
+
   }, []);
 
+
+
+  const filteredLogs =
+    dashboardData?.recent_logs.filter((student) =>
+      student.studentNumber
+        .toLowerCase()
+        .includes(search.toLowerCase())
+
+      ||
+
+      student.name
+        .toLowerCase()
+        .includes(search.toLowerCase())
+
+      ||
+
+      student.college
+        .toLowerCase()
+        .includes(search.toLowerCase())
+
+    ) || [];
+
+
+
   return (
+
     <>
       <Sidebar />
 
       <div className="dashboard">
+
+
         <div className="dashboard-header">
           <h1>OSA Dashboard</h1>
         </div>
 
-        <SearchBar />
 
+        <SearchBar
+          search={search}
+          setSearch={setSearch}
+        />
+
+
+
+        {/* STAT CARDS */}
         <div className="stats-container">
+
           <StatCard
-            title="Students Today"
-            value={dashboardData ? dashboardData.total_students : "Loading..."}
+            title="STUDENTS TODAY"
+            value={
+              dashboardData
+                ? dashboardData.students_today
+                : "Loading..."
+            }
             icon={<FaUserGraduate />}
           />
 
+
           <StatCard
-            title="Average Scan Time"
-            value="2.4 sec"
+            title="AVERAGE SCAN TIME"
+            value={
+              dashboardData
+                ? dashboardData.average_scan_time
+                : "Loading..."
+            }
             icon={<FaClock />}
           />
 
+
           <StatCard
-            title="Semester Day"
+            title="SEMESTER DAY"
             value="35"
             icon={<FaCalendarAlt />}
           />
+
         </div>
 
+
+
+        {/* CHARTS */}
         <div className="charts-container">
-          <div className="chart-card">
-            <CollegeChart />
-          </div>
+
 
           <div className="chart-card">
-            <ComplianceChart />
+
+            <CollegeChart
+              data={
+                dashboardData?.college_chart || []
+              }
+            />
+
           </div>
+
+
+
+          <div className="chart-card">
+
+            <ComplianceChart
+              compliant={
+                dashboardData
+                  ? dashboardData.students_today -
+                    dashboardData.violations_today
+                  : 0
+              }
+
+              violations={
+                dashboardData
+                  ? dashboardData.violations_today
+                  : 0
+              }
+            />
+
+          </div>
+
+
         </div>
 
+
+
+
+        {/* RECENT LOGS */}
         <div className="table-card">
-          <h2>Recent Scan Logs</h2>
 
-          <table>
-            <thead>
-              <tr>
-                <th>Student Number</th>
-                <th>Name</th>
-                <th>College</th>
-                <th>Status</th>
-              </tr>
-            </thead>
 
-            <tbody>
-              {students.map((student, index) => (
-                <tr key={index}>
-                  <td>{student.studentNumber}</td>
-                  <td>{student.name}</td>
-                  <td>{student.college}</td>
-                  <td
-                    className={
-                      student.status === "Access Granted"
-                        ? "granted"
-                        : "violation"
-                    }
-                  >
-                    {student.status}
-                  </td>
+          <div className="table-header">
+
+            <h2>
+              Recent Scan Logs
+            </h2>
+
+
+            <button
+              onClick={() => navigate("/scan-history")}
+            >
+              View All Logs
+            </button>
+
+          </div>
+
+
+
+          {!dashboardData && (
+            <p>
+              Loading dashboard...
+            </p>
+          )}
+
+
+
+          {dashboardData && (
+
+            <table>
+
+              <thead>
+
+                <tr>
+                  <th>Student Number</th>
+                  <th>Name</th>
+                  <th>College</th>
+                  <th>Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+
+              </thead>
+
+
+              <tbody>
+
+                {filteredLogs.length > 0 ? (
+
+                  filteredLogs.map((student,index)=>(
+
+                    <tr key={index}>
+
+                      <td>
+                        {student.studentNumber}
+                      </td>
+
+                      <td>
+                        {student.name}
+                      </td>
+
+                      <td>
+                        {student.college}
+                      </td>
+
+                      <td
+                        className={
+                          student.status === "Access Granted"
+                            ? "granted"
+                            : "violation"
+                        }
+                      >
+                        {student.status}
+                      </td>
+
+                    </tr>
+
+                  ))
+
+                ) : (
+
+                  <tr>
+
+                    <td colSpan="4">
+                      No student found
+                    </td>
+
+                  </tr>
+
+                )}
+
+              </tbody>
+
+
+            </table>
+
+          )}
+
+
         </div>
+
+
       </div>
+
     </>
+
   );
+
 }
+
 
 export default Dashboard;

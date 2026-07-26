@@ -158,3 +158,191 @@ tbody tr:hover{
     background:#fafafa;
 
 }
+.records-page {
+    margin-left:70px;
+    padding:30px;
+    background:#f5f5f5;
+    min-height:100vh;
+}
+
+
+.records-page h1 {
+    color:#8b1114;
+    font-size:36px;
+}
+
+
+.subtitle {
+    color:#777;
+}
+
+
+/* BACK BUTTON */
+
+.back-btn {
+
+    background:white;
+    border:2px solid #8b1114;
+    color:#8b1114;
+
+    padding:10px 20px;
+
+    border-radius:10px;
+
+    font-size:16px;
+
+    cursor:pointer;
+
+    margin-bottom:20px;
+
+    transition:.2s;
+
+}
+
+
+.back-btn:hover {
+
+    background:#8b1114;
+    color:white;
+
+}
+
+
+
+/* SUMMARY */
+
+
+.summary-card {
+
+    background:white;
+
+    border-radius:15px;
+
+    padding:25px;
+
+    margin:30px 0;
+
+    display:flex;
+
+    gap:100px;
+
+    box-shadow:
+    0 5px 15px rgba(0,0,0,.08);
+
+}
+
+
+.summary-card h3 {
+
+    color:#8b1114;
+
+    font-size:30px;
+
+    margin:0;
+
+}
+
+
+.summary-card p {
+
+    color:#777;
+
+}
+
+
+
+/* TABLE */
+
+
+.recent-card {
+
+    background:white;
+
+    padding:25px;
+
+    border-radius:15px;
+
+    box-shadow:
+    0 5px 15px rgba(0,0,0,.08);
+
+}
+
+
+table {
+
+    width:100%;
+
+}
+
+
+thead {
+
+    background:#8b1114;
+
+    color:white;
+
+}
+
+
+th {
+
+    padding:15px;
+
+}
+
+
+
+td {
+
+    padding:15px;
+
+    border-bottom:1px solid #eee;
+
+}
+
+
+
+/* STATUS */
+
+
+.violation {
+
+    color:red;
+
+    font-weight:bold;
+
+}
+
+
+.clear {
+
+    color:green;
+
+}
+
+
+
+/* BUTTON */
+
+.view-btn {
+
+    border:1px solid #8b1114;
+
+    background:white;
+
+    color:#8b1114;
+
+    padding:8px 15px;
+
+    border-radius:8px;
+
+}
+
+
+.view-btn:hover {
+
+    background:#8b1114;
+
+    color:white;
+
+}

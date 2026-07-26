@@ -1,5 +1,12 @@
 from django.contrib import admin
-from .models import Student, Violation, OSAAccount
+from .models import (
+    Student,
+    Violation,
+    OSAAccount,
+    AccessAttempt,
+    EntryLog,
+    ViolationReport
+)
 
 
 @admin.register(Student)
@@ -48,4 +55,62 @@ class OSAAccountAdmin(admin.ModelAdmin):
 
     search_fields = (
         "email",
+    )
+
+@admin.register(AccessAttempt)
+class AccessAttemptAdmin(admin.ModelAdmin):
+    list_display = (
+        "student",
+        "scan_time",
+        "has_violation",
+        "gate_opened",
+        "entered",
+    )
+
+    list_filter = (
+        "has_violation",
+        "gate_opened",
+        "entered",
+        "scan_time",
+    )
+
+    search_fields = (
+        "student__full_name",
+        "student__student_number",
+    )
+
+
+@admin.register(EntryLog)
+class EntryLogAdmin(admin.ModelAdmin):
+    list_display = (
+        "attempt",
+        "entry_time",
+        "status",
+    )
+
+    list_filter = (
+        "status",
+        "entry_time",
+    )
+
+@admin.register(ViolationReport)
+class ViolationReportAdmin(admin.ModelAdmin):
+    list_display = (
+        "student",
+        "violation_type",
+        "confirmed_entry",
+        "sent_to_osa",
+        "report_time",
+    )
+
+    list_filter = (
+        "confirmed_entry",
+        "sent_to_osa",
+        "report_time",
+    )
+
+    search_fields = (
+        "student__full_name",
+        "student__student_number",
+        "violation_type",
     )

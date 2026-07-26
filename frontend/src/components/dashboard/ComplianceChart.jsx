@@ -7,23 +7,27 @@ import {
   Legend,
 } from "recharts";
 
-const data = [
-  {
-    name: "Compliant",
-    value: 184,
-  },
-  {
-    name: "Violation",
-    value: 21,
-  },
-];
 
 const COLORS = [
   "#2ecc71",
   "#e74c3c",
 ];
 
-function ComplianceChart() {
+
+function ComplianceChart({ compliant, violations }) {
+
+  const data = [
+    {
+      name: "Compliant",
+      value: compliant,
+    },
+    {
+      name: "Violation",
+      value: violations,
+    },
+  ];
+
+
   return (
     <>
       <h2 style={{ marginBottom: "20px", color: "#7b1113" }}>
@@ -41,12 +45,14 @@ function ComplianceChart() {
             dataKey="value"
             label
           >
+
             {data.map((entry, index) => (
               <Cell
                 key={index}
                 fill={COLORS[index]}
               />
             ))}
+
           </Pie>
 
           <Tooltip />
