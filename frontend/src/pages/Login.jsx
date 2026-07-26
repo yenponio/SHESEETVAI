@@ -1,15 +1,42 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 function Login() {
   const navigate = useNavigate();
 
-  const handleLogin = (e) => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const handleLogin = async (e) => {
     e.preventDefault();
 
-    // Temporary login
-    localStorage.setItem("osaLoggedIn", "true");
+    try {
+      const response = await fetch(
+        "http://127.0.0.1:8000/api/students/login/",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email,
+            password,
+          }),
+        }
+      );
 
-    navigate("/dashboard");
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        localStorage.setItem("osaLoggedIn", "true");
+        navigate("/dashboard");
+      } else {
+        alert(data.message);
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Cannot connect to the server.");
+    }
   };
 
   return (
@@ -37,8 +64,10 @@ function Login() {
         </h2>
 
         <input
-          type="text"
-          placeholder="Username"
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
           style={{
             width: "100%",
             padding: "10px",
@@ -49,6 +78,8 @@ function Login() {
         <input
           type="password"
           placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
           style={{
             width: "100%",
             padding: "10px",
