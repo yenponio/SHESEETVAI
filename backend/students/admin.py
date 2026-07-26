@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Student, Violation
+from .models import Student, Violation, OSAAccount
 
 
 @admin.register(Student)
@@ -36,4 +36,16 @@ class ViolationAdmin(admin.ModelAdmin):
         "student__full_name",
         "student__student_number",
         "violation_type",
+    )
+
+
+@admin.register(OSAAccount)
+class OSAAccountAdmin(admin.ModelAdmin):
+    list_display = (
+        "email",
+        "password",
+    )
+
+    search_fields = (
+        "email",
     )

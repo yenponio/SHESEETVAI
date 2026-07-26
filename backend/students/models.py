@@ -41,3 +41,11 @@ class Violation(models.Model):
 
     def __str__(self):
         return f"{self.student.full_name} - {self.violation_type}"
+
+
+class OSAAccount(models.Model):
+    email = models.EmailField(unique=True)
+    password = models.CharField(max_length=100)
+
+    def __str__(self):
+        return self.email

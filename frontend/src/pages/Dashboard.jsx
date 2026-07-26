@@ -17,27 +17,51 @@ function Dashboard() {
 
   const students = [
     {
-      studentNumber: "20951987",
-      name: "Ponio, Jennesie Erin L.",
-      college: "CCS",
-      status: "Access Granted",
-    },
-    {
       studentNumber: "20969752",
       name: "Ishii, Yuichiro L.",
-      college: "CEA",
+      college: "CCJEF",
       status: "Access Granted",
     },
     {
       studentNumber: "20957815",
       name: "Muldong, Geyser Ardin S.",
-      college: "CCS",
+      college: "SEA",
       status: "Dress Code Violation",
     },
     {
-      studentNumber: "20960001",
-      name: "Juan Dela Cruz",
-      college: "CHTM",
+      studentNumber: "20950773",
+      name: "Santos, Raynier Ronn G.",
+      college: "SHTM",
+      status: "Access Granted",
+    },
+    {
+      studentNumber: "20952281",
+      name: "Cayanan, Jerica Therese F.",
+      college: "SE",
+      status: "Access Granted",
+    },
+    {
+      studentNumber: "20959288",
+      name: "Jose, Chloe Lane B.",
+      college: "SC",
+      status: "Dress Code Violation",
+    },
+    {
+      studentNumber: "20550881",
+      name: "Punsalan, Jeneveve S.",
+      college: "SNAMS",
+      status: "Access Granted",
+    },
+    {
+      studentNumber: "20968222",
+      name: "Tapnio, Patricia Lei R.",
+      college: "SAS",
+      status: "Dress Code Violation",
+    },
+    {
+      studentNumber: "20951987",
+      name: "Ponio, Jennesie Erin L.",
+      college: "SBA",
       status: "Access Granted",
     },
   ];
