@@ -1,5 +1,5 @@
 import "./../styles/Dashboard.css";
-
+import { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 
 import SearchBar from "../components/dashboard/SearchBar";
@@ -13,6 +13,8 @@ import {
 } from "react-icons/fa";
 
 function Dashboard() {
+  const [dashboardData, setDashboardData] = useState(null);
+
   const students = [
     {
       studentNumber: "20951987",
@@ -40,6 +42,22 @@ function Dashboard() {
     },
   ];
 
+  useEffect(() => {
+    async function fetchDashboard() {
+      const response = await fetch(
+        "http://127.0.0.1:8000/api/students/dashboard/"
+      );
+
+      const data = await response.json();
+
+      console.log(data);
+
+      setDashboardData(data);
+    }
+
+    fetchDashboard();
+  }, []);
+
   return (
     <>
       <Sidebar />
@@ -54,7 +72,7 @@ function Dashboard() {
         <div className="stats-container">
           <StatCard
             title="Students Today"
-            value="184"
+            value={dashboardData ? dashboardData.total_students : "Loading..."}
             icon={<FaUserGraduate />}
           />
 
