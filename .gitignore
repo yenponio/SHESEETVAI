@@ -37,3 +37,16 @@ __pycache__/
 
 # Node
 node_modules/
+# Python cache
+__pycache__/
+*.pyc
+
+# AI output files
+ai/runs/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# YOLO generated outputs
+ai/runs/
