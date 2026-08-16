@@ -3,13 +3,11 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from django.http import JsonResponse
-from django.utils import timezone
-from django.db.models import Count
-from .models import Student, ViolationReport, AccessAttempt
 
 from .models import (
     Student,
     OSAAccount,
+    AccessAttempt,
     EntryLog,
     ViolationReport
 )
@@ -17,13 +15,24 @@ from .models import (
 from .serializers import StudentSerializer
 
 
+# =========================================================
+# STUDENT LIST
+# =========================================================
+
 class StudentList(generics.ListAPIView):
+
     queryset = Student.objects.all()
     serializer_class = StudentSerializer
 
 
+# =========================================================
+# LOGIN
+# =========================================================
+
 class LoginView(APIView):
+
     def post(self, request):
+
         email = request.data.get("email")
         password = request.data.get("password")
 
@@ -33,6 +42,7 @@ class LoginView(APIView):
         ).first()
 
         if account:
+
             return Response(
                 {
                     "success": True,
@@ -49,6 +59,11 @@ class LoginView(APIView):
             status=status.HTTP_401_UNAUTHORIZED
         )
 
+
+# =========================================================
+# LATEST SCAN
+# =========================================================
+
 class LatestScanView(APIView):
 
     def get(self, request):
@@ -62,99 +77,79 @@ class LatestScanView(APIView):
         if not attempt:
 
             return Response({
-                "success":False
+                "success": False
             })
-
 
         student = attempt.student
 
         attempt.processed = True
         attempt.save()
 
+        photo = None
+
+        if student.id_front:
+            photo = request.build_absolute_uri(
+                student.id_front.url
+            )
+
         return Response({
 
-            "success":True,
+            "success": True,
 
-            "student":{
+            "student": {
 
-                "id":student.student_number,
+                "id": student.student_number,
 
-                "name":student.full_name,
+                "name": student.full_name,
 
-                "college":student.college,
+                "college": student.college,
 
-                "photo":
-                student.id_front.url
-                if student.id_front
-                else None
+                "photo": photo
             }
 
         })
+
+
+# =========================================================
+# DASHBOARD DATA
+# =========================================================
+
 def dashboard_data(request):
 
-    from django.http import JsonResponse
-    from .models import AccessAttempt, Student, ViolationReport
-
-
-    # TOTAL SCANS
-
     students_today = AccessAttempt.objects.count()
-
-
-
-    # TOTAL VIOLATIONS
 
     total_violations = AccessAttempt.objects.filter(
         has_violation=True
     ).count()
 
-
-
     violations_today = total_violations
 
-
-
-    compliant = (
-        students_today - total_violations
-    )
-
+    compliant = students_today - total_violations
 
     if compliant < 0:
         compliant = 0
-
-
-
 
     # =========================
     # COLLEGE CHART
     # =========================
 
-
     college_chart = []
-
 
     colleges = Student.objects.values_list(
         "college",
         flat=True
     ).distinct()
 
-
-
     for college in colleges:
-
 
         students = AccessAttempt.objects.filter(
             student__college=college
         ).count()
 
-
-
         violations = AccessAttempt.objects.filter(
             student__college=college,
             has_violation=True
         ).count()
-
-
 
         college_chart.append({
 
@@ -166,16 +161,11 @@ def dashboard_data(request):
 
         })
 
-
-
-
     # =========================
     # RECENT LOGS
     # =========================
 
-
     recent_logs = []
-
 
     attempts = AccessAttempt.objects.select_related(
         "student"
@@ -183,31 +173,23 @@ def dashboard_data(request):
         "-scan_time"
     )[:10]
 
-
-
     for attempt in attempts:
-
 
         recent_logs.append({
 
             "studentNumber":
                 attempt.student.student_number,
 
-
             "name":
                 attempt.student.full_name,
-
 
             "college":
                 attempt.student.college,
 
-
             "status":
                 "Dress Code Violation"
                 if attempt.has_violation
-                else
-                "Access Granted",
-
+                else "Access Granted",
 
             "time":
                 attempt.scan_time.strftime(
@@ -216,39 +198,36 @@ def dashboard_data(request):
 
         })
 
-
-
-
     return JsonResponse({
 
         "students_today":
             students_today,
 
-
         "total_violations":
             total_violations,
-
 
         "violations_today":
             violations_today,
 
-
         "compliant":
             compliant,
-
 
         "violation_count":
             total_violations,
 
-
         "college_chart":
             college_chart,
-
 
         "recent_logs":
             recent_logs
 
     })
+
+
+# =========================================================
+# RECORDS
+# =========================================================
+
 def records_data(request):
 
     students = Student.objects.all()
@@ -261,16 +240,19 @@ def records_data(request):
             student=student
         )
 
-
         records.append({
 
-            "studentNumber": student.student_number,
+            "studentNumber":
+                student.student_number,
 
-            "name": student.full_name,
+            "name":
+                student.full_name,
 
-            "college": student.college,
+            "college":
+                student.college,
 
-            "violations": violations.count(),
+            "violations":
+                violations.count(),
 
             "status":
                 "Violation"
@@ -279,68 +261,146 @@ def records_data(request):
 
         })
 
-
     return JsonResponse({
         "records": records
     })
 
 
+# =========================================================
+# BARCODE SCAN
+# =========================================================
+
 class BarcodeScanView(APIView):
 
     def post(self, request):
 
-        student_number = request.data.get("student_number")
+        # Get barcode sent by the physical scanner
+        barcode = request.data.get("barcode")
 
+        # Make sure it is treated as text
+        if barcode is not None:
+            barcode = str(barcode).strip()
 
-        if not student_number:
+        # No barcode
+        if not barcode:
+
             return Response(
                 {
                     "success": False,
-                    "message": "No student number provided"
+                    "message": "No barcode provided"
                 },
-                status=400
+                status=status.HTTP_400_BAD_REQUEST
             )
 
+        print("BARCODE RECEIVED:", barcode)
 
         try:
+
+            # =================================================
+            # FIND STUDENT USING BARCODE
+            # =================================================
+
             student = Student.objects.get(
-                student_number=student_number
+                barcode=barcode
             )
 
+            print(
+                "STUDENT FOUND:",
+                student.student_number,
+                student.full_name
+            )
+
+            # =================================================
+            # CREATE ACCESS ATTEMPT
+            # =================================================
 
             attempt = AccessAttempt.objects.create(
                 student=student
             )
 
+            # =================================================
+            # GET ID FRONT PHOTO
+            # =================================================
+
+            photo = None
+
+            if student.id_front:
+
+                photo = request.build_absolute_uri(
+                    student.id_front.url
+                )
+
+                print(
+                    "ID PHOTO:",
+                    photo
+                )
+
+            else:
+
+                print(
+                    "NO ID PHOTO FOR:",
+                    student.student_number
+                )
+
+            # =================================================
+            # RETURN STUDENT INFORMATION
+            # =================================================
 
             return Response(
+
                 {
                     "success": True,
-                    "student": {
-                        "id": student.student_number,
-                        "name": student.full_name,
-                        "college": student.college,
-                        "photo": (
-                            student.id_front.url
-                            if student.id_front
-                            else None
-                        )
-                    },
-                    "attempt_id": attempt.id
-                }
-            )
 
+                    "student": {
+
+                        "id":
+                            student.student_number,
+
+                        "name":
+                            student.full_name,
+
+                        "college":
+                            student.college,
+
+                        "photo":
+                            photo
+
+                    },
+
+                    "attempt_id":
+                        attempt.id
+                },
+
+                status=status.HTTP_200_OK
+            )
 
         except Student.DoesNotExist:
 
+            print(
+                "BARCODE NOT FOUND:",
+                barcode
+            )
 
             return Response(
+
                 {
                     "success": False,
-                    "message": "Student not found"
+
+                    "message":
+                        "Barcode not registered",
+
+                    "barcode":
+                        barcode
                 },
-                status=404
+
+                status=status.HTTP_404_NOT_FOUND
             )
+
+
+# =========================================================
+# RECEIVE AI RESULT
+# =========================================================
+
 @api_view(["POST"])
 def receive_ai_result(request):
 
@@ -348,7 +408,7 @@ def receive_ai_result(request):
         "student_number"
     )
 
-    status = request.data.get(
+    result_status = request.data.get(
         "status"
     )
 
@@ -356,7 +416,6 @@ def receive_ai_result(request):
         "violations",
         []
     )
-
 
     try:
 
@@ -371,10 +430,8 @@ def receive_ai_result(request):
                 "success": False,
                 "message": "Student not found"
             },
-            status=404
+            status=status.HTTP_404_NOT_FOUND
         )
-
-
 
     attempt = AccessAttempt.objects.filter(
         student=student,
@@ -383,41 +440,37 @@ def receive_ai_result(request):
         "-scan_time"
     ).first()
 
-
-
     if not attempt:
 
         attempt = AccessAttempt.objects.create(
             student=student
         )
 
-
-
     attempt.has_violation = (
-        status == "VIOLATION"
+        result_status == "VIOLATION"
     )
-
 
     attempt.violation_type = ",".join(
         violations
     )
 
-
     attempt.gate_opened = True
 
-
     attempt.save()
-
-
 
     return Response({
 
         "success": True,
 
         "message":
-        "AI result received"
+            "AI result received"
 
     })
+
+
+# =========================================================
+# CONFIRM ENTRY
+# =========================================================
 
 @api_view(["POST"])
 def confirm_entry(request):
@@ -426,25 +479,21 @@ def confirm_entry(request):
         "student_number"
     )
 
-
     try:
 
         student = Student.objects.get(
             student_number=student_number
         )
 
-
     except Student.DoesNotExist:
 
         return Response(
             {
-                "success":False,
-                "message":"Student not found"
+                "success": False,
+                "message": "Student not found"
             },
-            status=404
+            status=status.HTTP_404_NOT_FOUND
         )
-
-
 
     attempt = AccessAttempt.objects.filter(
         student=student,
@@ -453,44 +502,40 @@ def confirm_entry(request):
         "-scan_time"
     ).first()
 
-
-
     if not attempt:
 
         return Response(
             {
-                "success":False,
-                "message":"No pending entry"
+                "success": False,
+                "message": "No pending entry"
             },
-            status=404
+            status=status.HTTP_404_NOT_FOUND
         )
 
-
-
-    # ultrasonic confirmation
+    # =================================================
+    # ULTRASONIC CONFIRMATION
+    # =================================================
 
     attempt.entered = True
-
     attempt.save()
 
-
-
-    # Create entry log
+    # =================================================
+    # CREATE ENTRY LOG
+    # =================================================
 
     entry, created = EntryLog.objects.get_or_create(
 
         attempt=attempt,
 
         defaults={
-
-            "status":"Access Granted"
-
+            "status": "Access Granted"
         }
 
     )
 
-
-    # Save violation after entry confirmation
+    # =================================================
+    # SAVE VIOLATION
+    # =================================================
 
     if attempt.has_violation:
 
@@ -498,19 +543,18 @@ def confirm_entry(request):
 
             student=student,
 
-            violation_type=attempt.violation_type,
+            violation_type=
+                attempt.violation_type,
 
             confirmed_entry=True
 
         )
 
-
-
     return Response({
 
-        "success":True,
+        "success": True,
 
         "message":
-        "Entry confirmed"
+            "Entry confirmed"
 
     })

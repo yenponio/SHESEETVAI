@@ -3,6 +3,14 @@ from django.db import models
 
 class Student(models.Model):
     student_number = models.CharField(max_length=20, unique=True)
+
+    barcode = models.CharField(
+        max_length=50,
+        unique=True,
+        blank=True,
+        null=True
+    )
+
     full_name = models.CharField(max_length=150)
     email = models.EmailField()
     college = models.CharField(max_length=150)
@@ -50,6 +58,7 @@ class OSAAccount(models.Model):
     def __str__(self):
         return self.email
 
+
 class AccessAttempt(models.Model):
     student = models.ForeignKey(
         Student,
@@ -76,12 +85,14 @@ class AccessAttempt(models.Model):
     entered = models.BooleanField(
         default=False
     )
+
     processed = models.BooleanField(
         default=False
     )
 
     def __str__(self):
         return f"{self.student} - {self.scan_time}"
+
 
 class EntryLog(models.Model):
     attempt = models.OneToOneField(
@@ -118,12 +129,11 @@ class ViolationReport(models.Model):
 
     confirmed_entry = models.BooleanField(
         default=False
-    )   
+    )
 
     sent_to_osa = models.BooleanField(
         default=False
     )
-
 
     def __str__(self):
         return f"{self.student} - {self.violation_type}"
