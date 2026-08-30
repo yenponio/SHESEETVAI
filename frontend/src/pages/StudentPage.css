@@ -1,169 +1,488 @@
-/* StudentPage.css - Updated */
+/* =========================================
+   STUDENT PAGE
+   ========================================= */
 
-.studentPage{
-    width:100%;
-    min-height:100vh;
-    background:#eef2f7;
-    font-family:Arial, Helvetica, sans-serif;
-    padding:20px;
+* {
+    box-sizing: border-box;
+    font-family: Arial, Helvetica, sans-serif;
 }
 
-*{
-    box-sizing:border-box;
-    font-family:Arial, Helvetica, sans-serif;
+.studentPage {
+    width: 100%;
+    min-height: 100vh;
+    background: #eef2f7;
+    padding: 20px;
 }
 
-.header{
-    height:90px;
-    background:#7B1113;
-    color:#fff;
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    padding:0 25px;
-    border-radius:16px;
+
+/* =========================================
+   HEADER
+   ========================================= */
+
+.header {
+    height: 90px;
+    background: #7B1113;
+    color: #fff;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    padding: 0 25px;
+    border-radius: 16px;
 }
 
-.headerLeft{
-    display:flex;
-    align-items:center;
-    gap:16px;
+.headerLeft {
+    display: flex;
+    align-items: center;
+    gap: 16px;
 }
 
-.hauLogo{
-    width:56px;
-    height:56px;
+.hauLogo {
+    width: 56px;
+    height: 56px;
 }
 
-.headerLeft h1{
-    color:#fff;
-    font-size:30px;
-    margin:0;
+.headerLeft h1 {
+    color: #fff;
+    font-size: 30px;
+    margin: 0;
 }
 
-.headerLeft p{
-    color:#fff;
-    font-size:18px;
-    margin:2px 0 0;
+.headerLeft p {
+    color: #fff;
+    font-size: 18px;
+    margin: 2px 0 0;
 }
 
-.dateTime{
-    color:#fff;
-    font-size:18px;
+.dateTime {
+    color: #fff;
+    font-size: 18px;
 }
 
-.mainLayout{
-    display:grid;
-    grid-template-columns:68% 32%;
-    gap:20px;
-    margin-top:20px;
+
+/* =========================================
+   MAIN LAYOUT
+   ========================================= */
+
+.mainLayout {
+    display: grid;
+
+    grid-template-columns:
+        minmax(0, 2fr)
+        minmax(300px, 0.8fr);
+
+    gap: 20px;
+
+    margin-top: 20px;
+
+    align-items: start;
 }
 
-.cameraCard,.infoCard,.resultCard{
-    background:#fff;
-    border-radius:16px;
-    box-shadow:0 6px 18px rgba(0,0,0,.08);
-    padding:16px;
+
+/* =========================================
+   CARDS
+   ========================================= */
+
+.cameraCard,
+.infoCard,
+.resultCard {
+    background: #fff;
+
+    border-radius: 16px;
+
+    box-shadow:
+        0 6px 18px rgba(0, 0, 0, 0.08);
+
+    padding: 16px;
+
+    box-sizing: border-box;
 }
 
-.cameraBox{
-    width:100%;
-    height:100%;
-    background:#111;
-    border-radius:12px;
-    overflow:hidden;
+
+/* =========================================
+   CAMERA CARD
+   ========================================= */
+
+.cameraCard {
+    width: 100%;
+
+    height: 650px;
+
+    display: flex;
 }
 
-.cameraFeed{
-    width:100%;
-    height:100%;
-    object-fit:cover;
+
+/* =========================================
+   CAMERA BOX
+   ========================================= */
+
+.cameraBox {
+    width: 100%;
+    height: 100%;
+
+    background: #111;
+
+    border-radius: 12px;
+
+    overflow: hidden;
+
+    display: flex;
+
+    justify-content: center;
+
+    align-items: center;
 }
 
-.cameraGuide{
-    display:none;
+
+/* =========================================
+   CAMERA FEED
+   ========================================= */
+
+.cameraFeed {
+    display: block;
+
+    width: 100%;
+    height: 100%;
+
+    object-fit: contain;
+
+    object-position: center;
 }
 
-.rightPanel{
-    display:flex;
-    flex-direction:column;
-    gap:16px;
+
+/* =========================================
+   CAMERA PLACEHOLDER
+   ========================================= */
+
+.cameraPlaceholder {
+    width: 100%;
+    height: 100%;
+
+    display: flex;
+
+    flex-direction: column;
+
+    align-items: center;
+
+    justify-content: center;
+
+    text-align: center;
+
+    color: #fff;
 }
+
+.cameraPlaceholder h2 {
+    margin: 0 0 10px;
+
+    font-size: 28px;
+}
+
+.cameraPlaceholder p {
+    margin: 0;
+
+    font-size: 17px;
+
+    color: #ccc;
+}
+
+
+.cameraGuide {
+    display: none;
+}
+
+
+/* =========================================
+   RIGHT PANEL
+   ========================================= */
+
+.rightPanel {
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 16px;
+
+    width: 100%;
+}
+
+
+/* =========================================
+   CARD HEADINGS
+   ========================================= */
 
 .infoCard h2,
-.resultCard h2{
-    text-align:center;
-    color:#7B1113;
-    font-size:24px;
-    margin:0 0 18px;
+.resultCard h2 {
+    text-align: center;
+
+    color: #7B1113;
+
+    font-size: 24px;
+
+    margin: 0 0 18px;
 }
 
-.studentContainer{
-    display:flex;
-    flex-direction:column;
-    align-items:center;
+
+/* =========================================
+   STUDENT ID CONTAINER
+   ========================================= */
+
+.studentIdContainer {
+    width: 100%;
+
+    display: flex;
+
+    justify-content: center;
+
+    align-items: center;
 }
 
-.photo{
-    width:145px;
-    height:180px;
-    border-radius:10px;
-    background:#ddd;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    margin-bottom:20px;
+
+/* =========================================
+   STUDENT ID PHOTO AREA
+   ========================================= */
+
+.idPhoto {
+    width: 100%;
+
+    height: 330px;
+
+    background: #eeeeee;
+
+    border-radius: 10px;
+
+    display: flex;
+
+    justify-content: center;
+
+    align-items: center;
+
+    text-align: center;
+
+    overflow: hidden;
+
+    color: #888;
 }
 
-.details{
-    width:100%;
+
+/* =========================================
+   REAL STUDENT ID IMAGE
+   ========================================= */
+
+.idPhoto.scanned {
+    background: #fff;
 }
 
-.details p{
-    display:flex;
-    align-items:center;
-    margin:0;
-    padding:12px 0;
-    border-bottom:1px solid #ececec;
-    font-size:18px;
+.idPhoto.scanned img {
+    width: 100%;
+    height: 100%;
+
+    object-fit: contain;
+
+    object-position: center;
+
+    display: block;
 }
 
-.details strong{
-    width:150px;
-    font-weight:bold;
+
+/* =========================================
+   OLD STUDENT CONTAINER
+   ========================================= */
+
+.studentContainer {
+    display: flex;
+
+    flex-direction: column;
+
+    align-items: center;
 }
 
-.details span{
-    flex:1;
-    margin-left:15px;
+
+/* =========================================
+   PHOTO
+   ========================================= */
+
+.photo {
+    width: 145px;
+
+    height: 180px;
+
+    border-radius: 10px;
+
+    background: #ddd;
+
+    display: flex;
+
+    justify-content: center;
+
+    align-items: center;
+
+    margin-bottom: 20px;
 }
 
-.approved{
-    background:#18a848;
-    color:#fff;
-    text-align:center;
-    font-size:24px;
-    font-weight:bold;
-    padding:16px;
-    border-radius:10px;
-    margin-bottom:18px;
+
+/* =========================================
+   DETAILS
+   ========================================= */
+
+.details {
+    width: 100%;
 }
 
-.violationBox{
-    background:#f5f5f5;
-    border-radius:10px;
-    padding:14px;
+.details p {
+    display: flex;
+
+    align-items: center;
+
+    margin: 0;
+
+    padding: 12px 0;
+
+    border-bottom: 1px solid #ececec;
+
+    font-size: 18px;
 }
 
-.violationBox h3{
-    text-align:center;
-    color:#7B1113;
-    margin:0 0 10px;
-    font-size:22px;
+.details strong {
+    width: 150px;
+
+    font-weight: bold;
 }
 
-.violationBox p{
-    text-align:center;
-    font-size:18px;
-    margin:0;
+.details span {
+    flex: 1;
+
+    margin-left: 15px;
+}
+
+
+/* =========================================
+   DRESS CODE STATUS
+   ========================================= */
+
+.approved {
+    background: #18a848;
+
+    color: #fff;
+
+    text-align: center;
+
+    font-size: 24px;
+
+    font-weight: bold;
+
+    padding: 16px;
+
+    border-radius: 10px;
+
+    margin-bottom: 18px;
+}
+
+
+/* =========================================
+   VIOLATION BOX
+   ========================================= */
+
+.violationBox {
+    background: #f5f5f5;
+
+    border-radius: 10px;
+
+    padding: 14px;
+}
+
+.violationBox h3 {
+    text-align: center;
+
+    color: #7B1113;
+
+    margin: 0 0 10px;
+
+    font-size: 22px;
+}
+
+.violationBox p {
+    text-align: center;
+
+    font-size: 18px;
+
+    margin: 0;
+}
+
+
+/* =========================================
+   RESPONSIVE
+   ========================================= */
+
+@media (max-width: 1100px) {
+
+    .mainLayout {
+        grid-template-columns:
+            minmax(0, 1.6fr)
+            minmax(280px, 0.9fr);
+    }
+
+    .cameraCard {
+        height: 560px;
+    }
+
+    .idPhoto {
+        height: 280px;
+    }
+}
+
+
+@media (max-width: 850px) {
+
+    .mainLayout {
+        grid-template-columns: 1fr;
+    }
+
+    .cameraCard {
+        height: 520px;
+    }
+
+    .idPhoto {
+        height: 350px;
+    }
+}
+
+
+@media (max-width: 600px) {
+
+    .studentPage {
+        padding: 12px;
+    }
+
+    .header {
+        height: auto;
+
+        padding: 18px;
+
+        flex-direction: column;
+
+        gap: 12px;
+
+        align-items: flex-start;
+    }
+
+    .headerLeft h1 {
+        font-size: 24px;
+    }
+
+    .headerLeft p {
+        font-size: 15px;
+    }
+
+    .dateTime {
+        font-size: 14px;
+    }
+
+    .cameraCard {
+        height: 380px;
+    }
+
+    .idPhoto {
+        height: 300px;
+    }
 }

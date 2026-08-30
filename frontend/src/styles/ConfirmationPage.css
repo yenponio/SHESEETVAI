@@ -61,11 +61,15 @@
 .confirmation-container {
     display: grid;
 
-    grid-template-columns: 2.1fr 1fr;
+    grid-template-columns:
+        minmax(0, 2fr)
+        minmax(320px, 0.9fr);
 
     gap: 25px;
 
     width: 100%;
+
+    align-items: start;
 }
 
 
@@ -80,11 +84,12 @@
 
     padding: 20px;
 
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
-
-    min-height: 700px;
+    box-shadow:
+        0 4px 15px rgba(0, 0, 0, 0.08);
 
     box-sizing: border-box;
+
+    width: 100%;
 
     display: flex;
 
@@ -105,11 +110,9 @@
    ========================================= */
 
 .violation-photo {
-    flex: 1;
-
-    min-height: 600px;
-
     width: 100%;
+
+    height: 650px;
 
     background: #eeeeee;
 
@@ -122,17 +125,37 @@
     align-items: center;
 
     overflow: hidden;
+
+    box-sizing: border-box;
 }
 
 .violation-photo img {
+    display: block;
+
     width: 100%;
 
     height: 100%;
 
     object-fit: contain;
+
+    object-position: center;
+
+    border-radius: 10px;
 }
 
 .photo-placeholder {
+    width: 100%;
+
+    height: 100%;
+
+    display: flex;
+
+    flex-direction: column;
+
+    justify-content: center;
+
+    align-items: center;
+
     text-align: center;
 
     color: #888;
@@ -181,13 +204,13 @@
 
     transition: 0.25s ease;
 
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+    box-shadow:
+        0 4px 15px rgba(0, 0, 0, 0.08);
 }
 
 
 /* =========================================
    RAINY DAYS OFF
-   RED
    ========================================= */
 
 .rainy-days-card.rainy-off {
@@ -196,18 +219,19 @@
     border: 2px solid #7b1113;
 }
 
-.rainy-days-card.rainy-off .rainy-days-info h2 {
+.rainy-days-card.rainy-off
+.rainy-days-info h2 {
     color: #7b1113;
 }
 
-.rainy-days-card.rainy-off .rainy-days-info p {
+.rainy-days-card.rainy-off
+.rainy-days-info p {
     color: #7b1113;
 }
 
 
 /* =========================================
    RAINY DAYS ON
-   GREEN
    ========================================= */
 
 .rainy-days-card.rainy-on {
@@ -216,11 +240,13 @@
     border: 2px solid #2e7d32;
 }
 
-.rainy-days-card.rainy-on .rainy-days-info h2 {
+.rainy-days-card.rainy-on
+.rainy-days-info h2 {
     color: #2e7d32;
 }
 
-.rainy-days-card.rainy-on .rainy-days-info p {
+.rainy-days-card.rainy-on
+.rainy-days-info p {
     color: #2e7d32;
 }
 
@@ -312,14 +338,13 @@
     transition: 0.3s;
 }
 
-
-/* ON */
-
-.toggle-switch input:checked + .toggle-slider {
+.toggle-switch input:checked
++ .toggle-slider {
     background-color: #2e7d32;
 }
 
-.toggle-switch input:checked + .toggle-slider::before {
+.toggle-switch input:checked
++ .toggle-slider::before {
     transform: translateX(28px);
 }
 
@@ -362,9 +387,6 @@
     font-size: 14px;
 }
 
-
-/* ON STATUS */
-
 .rainy-status.active {
     background: #eef8ef;
 
@@ -395,13 +417,14 @@
 
     padding: 20px;
 
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
-
-    min-height: 380px;
+    box-shadow:
+        0 4px 15px rgba(0, 0, 0, 0.08);
 
     display: flex;
 
     flex-direction: column;
+
+    align-items: stretch;
 }
 
 .student-id-card h2 {
@@ -418,11 +441,9 @@
    ========================================= */
 
 .student-id-image {
-    flex: 1;
-
-    min-height: 280px;
-
     width: 100%;
+
+    height: 300px;
 
     background: #eeeeee;
 
@@ -435,17 +456,35 @@
     align-items: center;
 
     overflow: hidden;
+
+    box-sizing: border-box;
 }
 
 .student-id-image img {
+    display: block;
+
     width: 100%;
 
     height: 100%;
 
     object-fit: contain;
+
+    object-position: center;
 }
 
 .id-placeholder {
+    width: 100%;
+
+    height: 100%;
+
+    display: flex;
+
+    flex-direction: column;
+
+    justify-content: center;
+
+    align-items: center;
+
     color: #888;
 
     text-align: center;
@@ -473,7 +512,8 @@
 
     padding: 20px;
 
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+    box-shadow:
+        0 4px 15px rgba(0, 0, 0, 0.08);
 }
 
 .violation-card h2 {
@@ -519,6 +559,8 @@
     font-size: 20px;
 
     font-weight: bold;
+
+    line-height: 1.4;
 }
 
 
@@ -571,13 +613,19 @@
     transition: 0.2s ease;
 }
 
+.confirmation-button:disabled {
+    opacity: 0.65;
+
+    cursor: not-allowed;
+}
+
 .no-button {
     background: #2e7d32;
 
     color: white;
 }
 
-.no-button:hover {
+.no-button:hover:not(:disabled) {
     background: #256628;
 }
 
@@ -587,7 +635,7 @@
     color: white;
 }
 
-.yes-button:hover {
+.yes-button:hover:not(:disabled) {
     background: #5c0d0f;
 }
 
@@ -596,22 +644,36 @@
    RESPONSIVE
    ========================================= */
 
+@media (max-width: 1200px) {
+
+    .confirmation-container {
+        grid-template-columns:
+            minmax(0, 1.7fr)
+            minmax(300px, 1fr);
+    }
+
+    .violation-photo {
+        height: 560px;
+    }
+
+    .student-id-image {
+        height: 270px;
+    }
+}
+
+
 @media (max-width: 1000px) {
 
     .confirmation-container {
         grid-template-columns: 1fr;
     }
 
-    .photo-card {
-        min-height: 550px;
-    }
-
     .violation-photo {
-        min-height: 450px;
+        height: 520px;
     }
 
-    .student-id-card {
-        min-height: 400px;
+    .student-id-image {
+        height: 350px;
     }
 }
 
@@ -634,24 +696,12 @@
         margin-top: 10px;
     }
 
-    .confirmation-container {
-        grid-template-columns: 1fr;
-    }
-
-    .photo-card {
-        min-height: 400px;
-    }
-
     .violation-photo {
-        min-height: 300px;
-    }
-
-    .student-id-card {
-        min-height: 350px;
+        height: 360px;
     }
 
     .student-id-image {
-        min-height: 250px;
+        height: 300px;
     }
 
     .confirmation-buttons {

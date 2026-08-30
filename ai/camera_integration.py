@@ -1,21 +1,72 @@
 import cv2
+import time
+import os
+from collections import Counter
+from datetime import datetime
+
 from ultralytics import YOLO
 from fashn_human_parser import FashnHumanParser
+
 from shoulder_detector import detect_shoulders
 from pose_utils import build_body_keypoints
 from midriff_detector import detect_midriff
 from knee_detector import detect_knees
+from dress_code_checker import check_dress_code
 
+
+# ==========================================================
+# PATHS
+# ==========================================================
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+POSE_MODEL_PATH = os.path.join(
+    BASE_DIR,
+    "yolov8n-pose.pt"
+)
+
+CAPTURE_FOLDER = os.path.join(
+    BASE_DIR,
+    "captures"
+)
+
+os.makedirs(
+    CAPTURE_FOLDER,
+    exist_ok=True
+)
+
+
+# ==========================================================
+# LOAD AI MODELS
+# ==========================================================
 
 print("Loading YOLO Pose...")
-pose_model = YOLO("yolov8n-pose.pt")
+
+pose_model = YOLO(
+    POSE_MODEL_PATH
+)
 
 print("Loading Human Parser...")
+
 parser = FashnHumanParser()
 
 print("All AI Models Loaded!")
 
+
+# ==========================================================
+# SETTINGS
+# ==========================================================
+
 CONF = 0.5
+
+REQUIRED_STABLE_TIME = 1.0
+
+INSPECTION_FRAMES = 5
+
+
+# ==========================================================
+# YOLO KEYPOINTS
+# ==========================================================
 
 KEYPOINTS = {
     0: "Nose",
@@ -37,258 +88,947 @@ KEYPOINTS = {
     16: "Right Ankle",
 }
 
-cap = cv2.VideoCapture(0)
 
-printed_mask_info = False
+# ==========================================================
+# AI INSPECTION ENGINE
+# ==========================================================
 
-while True:
+class DressCodeInspection:
 
-    ret, frame = cap.read()
+    def __init__(self):
 
-    if not ret:
-        break
+        self.reset()
 
-    mask = parser.predict(frame)
 
-    if not printed_mask_info:
-        print("Human Parsing Mask Shape:", mask.shape)
-        printed_mask_info = True
+    # ======================================================
+    # RESET FOR NEW STUDENT
+    # ======================================================
 
-    results = pose_model.predict(frame, verbose=False)
+    def reset(self):
 
-    annotated = frame.copy()
+        self.inspection_state = "WAITING"
 
-    if len(results):
+        self.stable_start_time = None
 
-        r = results[0]
+        self.inspection_count = 0
 
-        annotated = r.plot()
+        self.inspection_results = []
 
-        if r.keypoints is not None:
+        self.final_result = None
 
-            data = r.keypoints.data.cpu().numpy()
+        self.recorded_violations = []
 
-            if len(data):
+        self.screenshot_saved = False
 
-                person = data[0]
+        self.screenshot_path = None
 
-                body = build_body_keypoints(
-                    person,
-                    KEYPOINTS,
-                    CONF
+        self.printed_mask_info = False
+
+        self.finished = False
+
+        print("")
+        print("========================================")
+        print("AI READY FOR NEW STUDENT")
+        print("========================================")
+
+
+    # ======================================================
+    # RETURN CURRENT RESULT
+    # ======================================================
+
+    def get_result(self):
+
+        return {
+            "finished": self.finished,
+            "status": self.final_result,
+            "violations": self.recorded_violations,
+            "screenshot": self.screenshot_path,
+        }
+
+
+    # ======================================================
+    # PROCESS ONE CAMERA FRAME
+    # ======================================================
+
+    def process_frame(self, frame):
+
+        if frame is None:
+
+            return frame, self.get_result()
+
+
+        # If already finished, don't process again
+        if self.finished:
+
+            return frame, self.get_result()
+
+
+        # ==================================================
+        # YOLO POSE
+        # ==================================================
+
+        results = pose_model.predict(
+            frame,
+            verbose=False
+        )
+
+        annotated = frame.copy()
+
+
+        if not results:
+
+            return annotated, self.get_result()
+
+
+        result = results[0]
+
+        annotated = result.plot()
+
+
+        if result.keypoints is None:
+
+            self.stable_start_time = None
+
+            self.draw_waiting_message(
+                annotated,
+                "No student detected"
+            )
+
+            return annotated, self.get_result()
+
+
+        data = (
+            result.keypoints.data
+            .cpu()
+            .numpy()
+        )
+
+
+        if len(data) == 0:
+
+            self.stable_start_time = None
+
+            self.draw_waiting_message(
+                annotated,
+                "No student detected"
+            )
+
+            return annotated, self.get_result()
+
+
+        # ==================================================
+        # USE FIRST DETECTED PERSON
+        # ==================================================
+
+        person = data[0]
+
+        body = build_body_keypoints(
+            person,
+            KEYPOINTS,
+            CONF
+        )
+
+
+        # ==================================================
+        # BODY VISIBILITY
+        # ==================================================
+
+        upper_body_visible = (
+            body["Left Shoulder"]["visible"]
+            and
+            body["Right Shoulder"]["visible"]
+        )
+
+        hips_visible = (
+            body["Left Hip"]["visible"]
+            and
+            body["Right Hip"]["visible"]
+        )
+
+        knees_visible = (
+            body["Left Knee"]["visible"]
+            and
+            body["Right Knee"]["visible"]
+        )
+
+        ankles_visible = (
+            body["Left Ankle"]["visible"]
+            and
+            body["Right Ankle"]["visible"]
+        )
+
+        full_body_visible = (
+            upper_body_visible
+            and hips_visible
+            and knees_visible
+            and ankles_visible
+        )
+
+
+        # ==================================================
+        # DISPLAY BODY CHECKS
+        # ==================================================
+
+        y_text = 30
+
+        cv2.putText(
+            annotated,
+            "AI Dress Code Inspection",
+            (10, y_text),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2
+        )
+
+        y_text += 40
+
+
+        checks = [
+            ("Student Detected", True),
+            (
+                "Shoulders Visible",
+                upper_body_visible
+            ),
+            (
+                "Hips Visible",
+                hips_visible
+            ),
+            (
+                "Knees Visible",
+                knees_visible
+            ),
+            (
+                "Ankles Visible",
+                ankles_visible
+            ),
+        ]
+
+
+        for label, passed in checks:
+
+            if passed:
+
+                text = f"[OK] {label}"
+
+                color = (
+                    0,
+                    255,
+                    0
                 )
 
-                shoulders = detect_shoulders(
-                    mask,
-                    parser,
-                    body
-                )
-                midriff = detect_midriff(
-                     mask,
-                     parser,
-                    body
-                )
-                knees = detect_knees(
-                     mask,
-                     parser,
-                     body
+            else:
+
+                text = f"[X] {label}"
+
+                color = (
+                    0,
+                    0,
+                    255
                 )
 
-                inspection = {
-                    "student_detected": True,
-                    "upper_body_visible": (
-                        body["Left Shoulder"]["visible"] and
-                        body["Right Shoulder"]["visible"]
-                    ),
-                    "lower_body_visible": (
-                        body["Left Hip"]["visible"] and
-                        body["Right Hip"]["visible"] and
-                        body["Left Knee"]["visible"] and
-                        body["Right Knee"]["visible"]
+
+            cv2.putText(
+                annotated,
+                text,
+                (10, y_text),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.55,
+                color,
+                2
+            )
+
+            y_text += 27
+
+
+        # ==================================================
+        # WAITING FOR FULL BODY
+        # ==================================================
+
+        if self.inspection_state == "WAITING":
+
+            if full_body_visible:
+
+                if self.stable_start_time is None:
+
+                    self.stable_start_time = (
+                        time.monotonic()
                     )
-                }
 
-                y_text = 30
-
-                cv2.putText(
-                    annotated,
-                    "AI Dress Code Inspection",
-                    (10, y_text),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    (255, 255, 255),
-                    2
-                )
-
-                y_text += 40
-
-                checks = [
-                    ("Student Detected", inspection["student_detected"]),
-                    ("Upper Body Visible", inspection["upper_body_visible"]),
-                    ("Lower Body Visible", inspection["lower_body_visible"]),
-                ]
-
-                for label, passed in checks:
-
-                    if passed:
-                        text = f"[OK] {label}"
-                        color = (0, 255, 0)
-                    else:
-                        text = f"[X] {label}"
-                        color = (0, 0, 255)
-
-                    cv2.putText(
-                        annotated,
-                        text,
-                        (10, y_text),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        color,
-                        2
+                    print("")
+                    print(
+                        "Full body detected."
                     )
 
-                    y_text += 30
+                    print(
+                        "Waiting for stable position..."
+                    )
 
-                y_text += 10
+
+                stable_time = (
+                    time.monotonic()
+                    -
+                    self.stable_start_time
+                )
+
+
+                remaining = max(
+                    0,
+                    REQUIRED_STABLE_TIME
+                    -
+                    stable_time
+                )
+
 
                 cv2.putText(
                     annotated,
-                    f"Left Shoulder : {shoulders['left_label']}",
+                    "Full body detected",
                     (10, y_text),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.6,
-                    (255, 255, 0),
+                    (0, 255, 255),
                     2
                 )
 
                 y_text += 30
 
-                cv2.putText(
-                    annotated,
-                    f"Right Shoulder: {shoulders['right_label']}",
-                    (10, y_text),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    (255, 255, 0),
-                    2
-                )
-
-                y_text += 30
-
-                if shoulders["covered"]:
-                    shoulder_status = "Shoulders: PASS"
-                    shoulder_color = (0, 255, 0)
-                else:
-                    shoulder_status = "Shoulders: FAIL"
-                    shoulder_color = (0, 0, 255)
 
                 cv2.putText(
                     annotated,
-                    shoulder_status,
+                    f"Preparing inspection: "
+                    f"{remaining:.1f}s",
                     (10, y_text),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.6,
-                    shoulder_color,
-                    2
-                )
-                y_text += 30
-
-                cv2.putText(
-                    annotated,
-                    f"Midriff Coverage: {midriff['coverage'] * 100:.1f}%",
-                    (10, y_text),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    (255, 255, 0),
+                    (0, 255, 255),
                     2
                 )
 
-                y_text += 30
 
-                if midriff["covered"]:
-                    midriff_status = "Midriff: PASS"
-                    midriff_color = (0, 255, 0)
-                else:
-                    midriff_status = "Midriff: FAIL"
-                    midriff_color = (0, 0, 255)
-
-                cv2.putText(
-                    annotated,
-                    midriff_status,
-                    (10, y_text),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    midriff_color,
-                    2
-                )
-
-                y_text += 30
+                # ==========================================
+                # FULL BODY STABLE
+                # ==========================================
 
                 if (
-                    inspection["upper_body_visible"] and
-                    inspection["lower_body_visible"]
+                    stable_time
+                    >= REQUIRED_STABLE_TIME
                 ):
-                    status = "Status: Ready for Inspection"
-                    color = (0, 255, 0)
-                else:
-                    status = "Status: Please stand properly"
-                    color = (0, 0, 255)
+
+                    self.inspection_state = (
+                        "INSPECTING"
+                    )
+
+                    self.inspection_count = 0
+
+                    self.inspection_results = []
+
+
+                    print("")
+                    print(
+                        "========================================"
+                    )
+
+                    print(
+                        "FULL BODY POSITION CONFIRMED"
+                    )
+
+                    print(
+                        "Starting Human Parser inspection..."
+                    )
+
+                    print(
+                        "========================================"
+                    )
+
+
+            else:
+
+                self.stable_start_time = None
 
                 cv2.putText(
                     annotated,
-                    status,
+                    "Please show full body",
                     (10, y_text),
                     cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    color,
+                    0.65,
+                    (0, 0, 255),
                     2
                 )
+
                 y_text += 30
+
                 cv2.putText(
                     annotated,
-                    f"Left Knee Coverage: {knees['left_coverage']*100:.1f}%",
+                    "Shoulders to ankles required",
                     (10, y_text),
                     cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    (255,255,0),
+                    0.5,
+                    (0, 0, 255),
                     2
                 )
 
-                y_text += 30
+
+        # ==================================================
+        # HUMAN PARSER INSPECTION
+        # ==================================================
+
+        if self.inspection_state == "INSPECTING":
+
+            cv2.putText(
+                annotated,
+                "Human Parser: ON",
+                (10, y_text),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 255, 0),
+                2
+            )
+
+            y_text += 30
+
+
+            cv2.putText(
+                annotated,
+                (
+                    f"Inspection: "
+                    f"{self.inspection_count + 1}/"
+                    f"{INSPECTION_FRAMES}"
+                ),
+                (10, y_text),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 255, 255),
+                2
+            )
+
+            y_text += 35
+
+
+            print(
+                f"Running Human Parser "
+                f"{self.inspection_count + 1}/"
+                f"{INSPECTION_FRAMES}..."
+            )
+
+
+            # ==============================================
+            # HUMAN PARSING
+            # ==============================================
+
+            mask = parser.predict(
+                frame
+            )
+
+
+            if not self.printed_mask_info:
+
+                print(
+                    "Human Parsing Mask Shape:",
+                    mask.shape
+                )
+
+                self.printed_mask_info = True
+
+
+            # ==============================================
+            # CLOTHING / BODY CHECKS
+            # ==============================================
+
+            shoulders = detect_shoulders(
+                mask,
+                parser,
+                body
+            )
+
+
+            midriff = detect_midriff(
+                mask,
+                parser,
+                body
+            )
+
+
+            knees = detect_knees(
+                mask,
+                parser,
+                body
+            )
+
+
+            current_result = {
+                "shoulders":
+                    shoulders["covered"],
+
+                "midriff":
+                    midriff["covered"],
+
+                "knees":
+                    knees["covered"],
+            }
+
+
+            self.inspection_results.append(
+                current_result
+            )
+
+
+            self.inspection_count += 1
+
+
+            # ==============================================
+            # DISPLAY CURRENT RESULTS
+            # ==============================================
+
+            shoulder_status = (
+                "PASS"
+                if shoulders["covered"]
+                else "FAIL"
+            )
+
+            shoulder_color = (
+                (0, 255, 0)
+                if shoulders["covered"]
+                else (0, 0, 255)
+            )
+
+
+            cv2.putText(
+                annotated,
+                f"Shoulders: {shoulder_status}",
+                (10, y_text),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                shoulder_color,
+                2
+            )
+
+            y_text += 30
+
+
+            midriff_status = (
+                "PASS"
+                if midriff["covered"]
+                else "FAIL"
+            )
+
+            midriff_color = (
+                (0, 255, 0)
+                if midriff["covered"]
+                else (0, 0, 255)
+            )
+
+
+            cv2.putText(
+                annotated,
+                (
+                    f"Midriff: "
+                    f"{midriff_status} "
+                    f"({midriff['coverage'] * 100:.1f}%)"
+                ),
+                (10, y_text),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.55,
+                midriff_color,
+                2
+            )
+
+            y_text += 30
+
+
+            knee_status = (
+                "PASS"
+                if knees["covered"]
+                else "FAIL"
+            )
+
+            knee_color = (
+                (0, 255, 0)
+                if knees["covered"]
+                else (0, 0, 255)
+            )
+
+
+            cv2.putText(
+                annotated,
+                f"Knees: {knee_status}",
+                (10, y_text),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                knee_color,
+                2
+            )
+
+            y_text += 35
+
+
+            # ==============================================
+            # ALL 5 FRAMES COMPLETE
+            # ==============================================
+
+            if (
+                self.inspection_count
+                >= INSPECTION_FRAMES
+            ):
+
+                self.finish_inspection(
+                    annotated
+                )
+
+
+        # ==================================================
+        # FINAL RESULT
+        # ==================================================
+
+        if self.inspection_state == "FINISHED":
+
+            self.draw_final_result(
+                annotated
+            )
+
+
+        return (
+            annotated,
+            self.get_result()
+        )
+
+
+    # ======================================================
+    # FINISH INSPECTION
+    # ======================================================
+
+    def finish_inspection(
+        self,
+        annotated
+    ):
+
+        print("")
+        print(
+            "========================================"
+        )
+
+        print(
+            "ALL INSPECTION FRAMES COMPLETE"
+        )
+
+        print(
+            "========================================"
+        )
+
+
+        shoulder_votes = [
+            result["shoulders"]
+            for result
+            in self.inspection_results
+        ]
+
+
+        midriff_votes = [
+            result["midriff"]
+            for result
+            in self.inspection_results
+        ]
+
+
+        knee_votes = [
+            result["knees"]
+            for result
+            in self.inspection_results
+        ]
+
+
+        final_shoulders_covered = (
+            Counter(
+                shoulder_votes
+            ).most_common(1)[0][0]
+        )
+
+
+        final_midriff_covered = (
+            Counter(
+                midriff_votes
+            ).most_common(1)[0][0]
+        )
+
+
+        final_knees_covered = (
+            Counter(
+                knee_votes
+            ).most_common(1)[0][0]
+        )
+
+
+        final_shoulders = {
+            "covered":
+                final_shoulders_covered
+        }
+
+
+        final_midriff = {
+            "covered":
+                final_midriff_covered
+        }
+
+
+        final_knees = {
+            "covered":
+                final_knees_covered
+        }
+
+
+        # ==================================================
+        # FINAL DRESS CODE CHECK
+        # ==================================================
+
+        final_check = check_dress_code(
+            final_shoulders,
+            final_midriff,
+            final_knees
+        )
+
+
+        if final_check["passed"]:
+
+            self.final_result = "PASS"
+
+        else:
+
+            self.final_result = (
+                "VIOLATION"
+            )
+
+
+        self.recorded_violations = (
+            final_check["violations"]
+        )
+
+
+        self.inspection_state = (
+            "FINISHED"
+        )
+
+
+        # ==================================================
+        # DRAW FINAL RESULT BEFORE SCREENSHOT
+        # ==================================================
+
+        self.draw_final_result(
+            annotated
+        )
+
+
+        # ==================================================
+        # SAVE SCREENSHOT
+        # ==================================================
+
+        timestamp = (
+            datetime.now().strftime(
+                "%Y%m%d_%H%M%S"
+            )
+        )
+
+
+        filename = (
+            f"inspection_{timestamp}.jpg"
+        )
+
+
+        screenshot_path = (
+            os.path.join(
+                CAPTURE_FOLDER,
+                filename
+            )
+        )
+
+
+        success = cv2.imwrite(
+            screenshot_path,
+            annotated
+        )
+
+
+        if success:
+
+            self.screenshot_saved = True
+
+            self.screenshot_path = (
+                screenshot_path
+            )
+
+            print(
+                "Final inspection screenshot saved:"
+            )
+
+            print(
+                screenshot_path
+            )
+
+        else:
+
+            print(
+                "ERROR: Could not save screenshot."
+            )
+
+
+        # ==================================================
+        # PRINT RESULT
+        # ==================================================
+
+        print("")
+        print(
+            "========================================"
+        )
+
+        print(
+            f"Dress Code Result: "
+            f"{self.final_result}"
+        )
+
+
+        if self.recorded_violations:
+
+            print("Violations:")
+
+            for violation in (
+                self.recorded_violations
+            ):
+
+                print(
+                    f"- {violation}"
+                )
+
+        else:
+
+            print(
+                "Violations: None"
+            )
+
+
+        print(
+            "========================================"
+        )
+
+
+        # THIS IS THE IMPORTANT SIGNAL
+        # camera_server.py will see this
+        # and close the camera.
+
+        self.finished = True
+
+
+    # ======================================================
+    # FINAL RESULT OVERLAY
+    # ======================================================
+
+    def draw_final_result(
+        self,
+        frame
+    ):
+
+        if self.final_result == "PASS":
+
+            final_text = (
+                "DRESS CODE: PASS"
+            )
+
+            final_color = (
+                0,
+                255,
+                0
+            )
+
+        else:
+
+            final_text = (
+                "DRESS CODE: VIOLATION"
+            )
+
+            final_color = (
+                0,
+                0,
+                255
+            )
+
+
+        cv2.rectangle(
+            frame,
+            (5, 5),
+            (500, 150),
+            (0, 0, 0),
+            -1
+        )
+
+
+        cv2.putText(
+            frame,
+            final_text,
+            (15, 40),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            final_color,
+            2
+        )
+
+
+        y = 75
+
+
+        if self.recorded_violations:
+
+            for violation in (
+                self.recorded_violations
+            ):
 
                 cv2.putText(
-                    annotated,
-                    f"Right Knee Coverage: {knees['right_coverage']*100:.1f}%",
-                    (10, y_text),
+                    frame,
+                    f"- {violation}",
+                    (15, y),
                     cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    (255,255,0),
+                    0.55,
+                    (0, 0, 255),
                     2
                 )
 
-                y_text += 30
+                y += 25
 
-                if knees["covered"]:
-                    knee_status = "Knees: PASS"
-                    knee_color = (0,255,0)
-                else:
-                    knee_status = "Knees: FAIL"
-                    knee_color = (0,0,255)
+        else:
 
-                cv2.putText(
-                    annotated,
-                    knee_status,
-                    (10,y_text),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    knee_color,
-                    2
-                )
+            cv2.putText(
+                frame,
+                "Violations: None",
+                (15, y),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 255, 0),
+                2
+            )
 
-    cv2.imshow("AI Dress Code - Integration Test", annotated)
 
-    if cv2.waitKey(1) & 0xFF == ord("q"):
-        break
+    # ======================================================
+    # WAITING MESSAGE
+    # ======================================================
 
-cap.release()
-cv2.destroyAllWindows()
+    def draw_waiting_message(
+        self,
+        frame,
+        message
+    ):
+
+        cv2.putText(
+            frame,
+            "AI Dress Code Inspection",
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2
+        )
+
+        cv2.putText(
+            frame,
+            message,
+            (10, 70),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 0, 255),
+            2
+        )
