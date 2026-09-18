@@ -6,17 +6,18 @@ from .views import (
     BarcodeScanView,
     LatestScanView,
     receive_ai_result,
-    records_data,
     confirm_entry,
     latest_pending_inspection,
     review_ai_inspection,
 )
 
 from .dashboard import dashboard_data
-from .records import school_records
+from .records import records_data, school_records
+from .gate_views import gate_attempt_status
 
 
 urlpatterns = [
+    path("gate/attempts/<int:attempt_id>/", gate_attempt_status, name="gate-attempt-status"),
 
     # =====================================================
     # STUDENTS

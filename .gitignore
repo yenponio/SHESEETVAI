@@ -50,3 +50,16 @@ __pycache__/
 
 # YOLO generated outputs
 ai/runs/
+
+# Local USB gate event journal and frontend build
+backend/gate_events.sqlite3*
+frontend/dist/
+
+# Private runtime data and local credentials
+ai/captures/
+backend/ai_inspections/
+backend/media/
+*.sqlite3*
+.env.*
+!.env.example
+!.env.sample

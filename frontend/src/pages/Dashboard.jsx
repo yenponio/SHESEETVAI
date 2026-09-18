@@ -1,5 +1,6 @@
 import "./../styles/Dashboard.css";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import useLiveData from "../hooks/useLiveData";
 import Sidebar from "../components/Sidebar";
 import { useNavigate } from "react-router-dom";
 import SearchBar from "../components/dashboard/SearchBar";
@@ -16,39 +17,8 @@ import {
 
 function Dashboard() {
   const navigate = useNavigate();
-  const [dashboardData, setDashboardData] = useState(null);
+  const { data: dashboardData, error } = useLiveData("http://127.0.0.1:8000/api/students/dashboard/");
   const [search, setSearch] = useState("");
-
-
-  useEffect(() => {
-
-    async function fetchDashboard() {
-
-      try {
-
-        const response = await fetch(
-          "http://127.0.0.1:8000/api/students/dashboard/"
-        );
-
-        const data = await response.json();
-
-        setDashboardData(data);
-
-      } catch (error) {
-
-        console.error(
-          "Dashboard error:",
-          error
-        );
-
-      }
-
-    }
-
-    fetchDashboard();
-
-  }, []);
-
 
 
   const filteredLogs =
@@ -86,6 +56,8 @@ function Dashboard() {
         </div>
 
 
+        {error && <p role="alert">{error}</p>}
+
         <SearchBar
           search={search}
           setSearch={setSearch}
@@ -119,8 +91,8 @@ function Dashboard() {
 
 
           <StatCard
-            title="SEMESTER DAY"
-            value="35"
+            title="VIOLATION RECORDS (ALL TIME)"
+            value={dashboardData ? dashboardData.total_violations : "Loading..."}
             icon={<FaCalendarAlt />}
           />
 
@@ -130,6 +102,7 @@ function Dashboard() {
 
         {/* CHARTS */}
         <div className="charts-container">
+          {!dashboardData ? <p>{error ? "Charts are unavailable." : "Loading charts..."}</p> : <>
 
 
           <div className="chart-card">
@@ -146,25 +119,12 @@ function Dashboard() {
 
           <div className="chart-card">
 
-            <ComplianceChart
-            compliant={
-            dashboardData
-            ? dashboardData.compliant
-            :0
-            }
-
-
-            violations={
-            dashboardData
-            ? dashboardData.total_violations
-            :0
-            }
-
-            />
+            <ComplianceChart data={dashboardData?.compliance_chart || []} />
 
           </div>
 
 
+          </>}
         </div>
 
 
@@ -237,7 +197,7 @@ function Dashboard() {
 
                       <td
                         className={
-                          student.status === "Access Granted"
+                          student.status === "No Violation"
                             ? "granted"
                             : "violation"
                         }

@@ -24,11 +24,12 @@ function CollegeChart({data}) {
   return (
     <>
       <h2 style={{ marginBottom:"20px", color:"#7b1113" }}>
-        Students by College
+        Violations by College
       </h2>
 
 
-      <ResponsiveContainer width="100%" height={320}>
+      <p>All time: {data.reduce((total, item) => total + item.violations, 0)} violation records</p>
+      {data.length === 0 ? <p>No violation records found.</p> : <ResponsiveContainer width="100%" height={320}>
 
         <BarChart
           data={data}
@@ -41,7 +42,7 @@ function CollegeChart({data}) {
           }}
         >
 
-          <XAxis hide />
+          <XAxis type="number" allowDecimals={false} />
 
           <YAxis
             type="category"
@@ -52,7 +53,7 @@ function CollegeChart({data}) {
 
 
           <Bar
-            dataKey="students"
+            dataKey="violations" name="Violation records"
             label={{
               position:"right",
               fill:"#444",
@@ -74,7 +75,7 @@ function CollegeChart({data}) {
 
         </BarChart>
 
-      </ResponsiveContainer>
+      </ResponsiveContainer>}
 
     </>
   );

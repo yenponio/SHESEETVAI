@@ -207,11 +207,11 @@ class ViolationReport(models.Model):
 # Flow:
 #
 # AI detects violation
-#       ↓
+#       â†“
 # screenshot + violations saved here
-#       ↓
+#       â†“
 # OSA sees it
-#       ↓
+#       â†“
 # OSA presses YES or NO
 #
 # ==========================================================
@@ -327,6 +327,13 @@ class AIInspection(models.Model):
         null=True
     )
 
+    # ======================================================
+    # FINAL VIOLATION ALREADY SAVED
+    # ======================================================
+
+    recorded = models.BooleanField(
+        default=False
+    )
 
     def __str__(self):
 
@@ -334,3 +341,35 @@ class AIInspection(models.Model):
             f"{self.student.student_number} - "
             f"{self.confirmation_status}"
         )
+
+
+# USB gate integration: no new calendar timestamp fields.
+class GateCycle(models.Model):
+    attempt = models.OneToOneField(
+        AccessAttempt, on_delete=models.CASCADE, primary_key=True,
+        related_name="gate_cycle",
+    )
+    phase = models.CharField(max_length=20, default="QUEUED")
+    outcome = models.CharField(max_length=20, default="PENDING")
+    bridge_id = models.CharField(max_length=64, blank=True)
+    message = models.CharField(max_length=160, blank=True)
+
+
+class GateController(models.Model):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1)
+    enabled = models.BooleanField(default=False)
+    connected = models.BooleanField(default=False)
+    ready = models.BooleanField(default=False)
+    active_cycle = models.OneToOneField(
+        GateCycle, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+",
+    )
+    bridge_id = models.CharField(max_length=64, blank=True)
+    process_id = models.PositiveIntegerField(default=0)
+    revision = models.PositiveBigIntegerField(default=0)
+
+
+class GateEvent(models.Model):
+    key = models.CharField(max_length=100, primary_key=True)
+    cycle = models.ForeignKey(GateCycle, on_delete=models.CASCADE)
+    event = models.CharField(max_length=32)

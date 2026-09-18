@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import "../styles/ConfirmationPage.css";
 
@@ -8,6 +8,8 @@ const OSA_DECISION_KEY =
 
 
 function ConfirmationPage() {
+  const reviewInProgress = useRef(false);
+  const requestVersion = useRef(0);
 
   const [currentTime, setCurrentTime] =
     useState(new Date());
@@ -56,17 +58,23 @@ function ConfirmationPage() {
   // =====================================================
 
   const fetchPendingInspection = async () => {
+    if (reviewInProgress.current) return;
+    const version = ++requestVersion.current;
 
     try {
 
       const response = await fetch(
-        "http://127.0.0.1:8000/api/students/ai-inspection/pending/"
+        "http://127.0.0.1:8000/api/students/ai-inspection/pending/",
+        { cache: "no-store" }
       );
 
 
       const data =
         await response.json();
 
+
+      if (reviewInProgress.current || version !== requestVersion.current) return;
+      if (!response.ok) throw new Error(data.message || "Unable to load pending inspections.");
 
       console.log(
         "Pending AI inspection:",
@@ -83,8 +91,6 @@ function ConfirmationPage() {
           data.inspection
         );
 
-        setMessage("");
-
       } else {
 
         setInspection(null);
@@ -94,6 +100,9 @@ function ConfirmationPage() {
 
     } catch (error) {
 
+      if (version === requestVersion.current && !reviewInProgress.current) {
+        setMessage("Unable to refresh pending inspections. Retrying automatically.");
+      }
       console.error(
         "Failed to get pending AI inspection:",
         error
@@ -141,7 +150,7 @@ function ConfirmationPage() {
     decision
   ) => {
 
-    if (!inspection) {
+    if (!inspection || reviewInProgress.current) {
 
       return;
 
@@ -150,6 +159,8 @@ function ConfirmationPage() {
 
     try {
 
+      reviewInProgress.current = true;
+      ++requestVersion.current;
       setReviewing(true);
 
       setMessage("");
@@ -161,6 +172,7 @@ function ConfirmationPage() {
 
       const inspectionId =
         inspection.id;
+      const attemptId = inspection.attempt_id;
 
 
       const response = await fetch(
@@ -222,6 +234,8 @@ function ConfirmationPage() {
 
             inspection_id:
               inspectionId,
+
+            attempt_id: attemptId,
 
             timestamp:
               Date.now(),
@@ -308,6 +322,7 @@ function ConfirmationPage() {
 
     } finally {
 
+      reviewInProgress.current = false;
       setReviewing(false);
 
     }
@@ -665,6 +680,9 @@ function ConfirmationPage() {
 
                 <>
 
+                  <p>
+                    Inspection #{inspection.id} | Captured {new Date(inspection.detected_at).toLocaleString("en-PH", { timeZone: "Asia/Manila" })} (Manila)
+                  </p>
                   <div className="violation-status">
 
 

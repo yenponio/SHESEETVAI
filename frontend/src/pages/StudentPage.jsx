@@ -5,6 +5,7 @@ import React, {
 } from "react";
 
 import "../App.css";
+import useGateCycle, { gateCycleFinished, gateMessage } from "../hooks/useGateCycle";
 
 
 const OSA_DECISION_KEY =
@@ -12,6 +13,15 @@ const OSA_DECISION_KEY =
 
 
 export default function StudentPage() {
+  const [activeAttemptId, setActiveAttemptId] = useState(null);
+  const [hardwareGate, setHardwareGate] = useState(false);
+  const [gateNotice, setGateNotice] = useState("");
+  const activeAttemptRef = useRef(null);
+  const hardwareGateRef = useRef(false);
+  const gateResettingRef = useRef(false);
+  const scanInFlightRef = useRef(false);
+  const gate = useGateCycle(hardwareGate ? activeAttemptId : null);
+
 
   const [currentTime, setCurrentTime] =
     useState(new Date());
@@ -73,6 +83,12 @@ export default function StudentPage() {
   // =====================================================
 
   const clearStudentPage = () => {
+    activeAttemptRef.current = null;
+    hardwareGateRef.current = false;
+    gateResettingRef.current = false;
+    setActiveAttemptId(null);
+    setHardwareGate(false);
+
 
     console.log(
       "Clearing previous student..."
@@ -243,6 +259,8 @@ export default function StudentPage() {
         await response.json();
 
 
+      if (String(activeAttemptRef.current) !== String(attemptId)) return false;
+
       console.log(
         "Start camera response:",
         data
@@ -342,8 +360,16 @@ export default function StudentPage() {
 
   const displayStudent = async (
     studentData,
-    attemptId
+    attemptId,
+    usesHardwareGate = false
   ) => {
+    activeAttemptRef.current = attemptId;
+    hardwareGateRef.current = usesHardwareGate;
+    gateResettingRef.current = false;
+    setActiveAttemptId(attemptId);
+    setHardwareGate(usesHardwareGate);
+    setGateNotice("");
+
 
     // Remove previous decision
     localStorage.removeItem(
@@ -414,6 +440,8 @@ export default function StudentPage() {
         const data =
           await response.json();
 
+
+        if (String(data.attempt_id) !== String(activeAttemptRef.current)) return;
 
         console.log(
           "AI result:",
@@ -516,7 +544,8 @@ export default function StudentPage() {
               true;
 
 
-            setTimeout(
+            if (!hardwareGateRef.current) {
+setTimeout(
               async () => {
 
                 await prepareNextStudent();
@@ -524,6 +553,7 @@ export default function StudentPage() {
               },
               2500
             );
+        }
 
           }
 
@@ -623,6 +653,8 @@ export default function StudentPage() {
         }
 
 
+        if (String(decisionData.attempt_id) !== String(activeAttemptRef.current)) return;
+
         // ===============================================
         // OSA CLICKED YES
         // ===============================================
@@ -701,7 +733,8 @@ export default function StudentPage() {
         // SHOW RESULT THEN PREPARE ATTEMPT 2
         // ===============================================
 
-        setTimeout(
+        if (!hardwareGateRef.current) {
+setTimeout(
           async () => {
 
             await prepareNextStudent();
@@ -709,6 +742,7 @@ export default function StudentPage() {
           },
           2500
         );
+        }
 
 
       } catch (error) {
@@ -741,6 +775,17 @@ export default function StudentPage() {
     };
 
   }, [student]);
+
+
+  useEffect(() => {
+    if (!hardwareGate || gateResettingRef.current ||
+        !gateCycleFinished(gate.cycle, scanStatus)) return;
+    gateResettingRef.current = true;
+    setGateNotice(gate.cycle.outcome === "ENTERED"
+      ? "Entry confirmed. Ready for the next ID."
+      : "Entry cancelled. No entry or final violation recorded.");
+    prepareNextStudent();
+  }, [hardwareGate, gate.cycle, scanStatus]);
 
 
   // =====================================================
@@ -805,7 +850,7 @@ export default function StudentPage() {
           // STUDENT IS ACTUALLY STILL ACTIVE
           // =============================================
 
-          if (student) {
+          if (student || scanInFlightRef.current) {
 
             console.log(
               "Student currently being processed."
@@ -816,6 +861,8 @@ export default function StudentPage() {
 
           }
 
+
+          scanInFlightRef.current = true;
 
           console.log(
             "Barcode scanned:",
@@ -880,7 +927,8 @@ export default function StudentPage() {
 
                 data.student,
 
-                data.attempt_id
+                data.attempt_id,
+                Boolean(data.hardware_gate)
 
               );
 
@@ -894,9 +942,8 @@ export default function StudentPage() {
             else {
 
               clearStudentPage();
-
-
-              await stopCamera();
+              setGateNotice(data.message || "ID could not be accepted.");
+              if (!String(data.code || "").startsWith("GATE_")) await stopCamera();
 
             }
 
@@ -908,6 +955,8 @@ export default function StudentPage() {
               error
             );
 
+          } finally {
+            scanInFlightRef.current = false;
           }
 
 
@@ -1360,6 +1409,13 @@ export default function StudentPage() {
         ================================================= */}
 
         <aside className="rightPanel">
+          {(hardwareGate || gateNotice) && (
+            <div className="resultCard" role="status" aria-live="polite">
+              <h2>Gate status</h2>
+              <p>{hardwareGate ? (gate.error || gateMessage(gate.cycle)) : gateNotice}</p>
+            </div>
+          )}
+
 
 
           {/* =================================================
