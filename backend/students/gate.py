@@ -4,13 +4,15 @@ The bridge is a Django management command on the same PC and uses the ORM.
 There is no public API which can assert that a student physically entered.
 """
 from contextlib import contextmanager
+from datetime import datetime, time, timedelta
 import psutil
 
 from django.db import transaction
 from django.db.models import F
+from django.utils import timezone
 from .models import (
     AccessAttempt, AIInspection, EntryLog, GateController, GateCycle,
-    GateEvent, Violation, ViolationReport,
+    GateEvent, Violation, ViolationReport, ViolationEmail,
 )
 
 CANCELLED_OUTCOMES = ("WALKED_AWAY", "CANCELLED", "UNCERTAIN")
@@ -126,13 +128,32 @@ def save_violation(inspection_id):
             attempt_id=inspection.attempt_id, outcome__in=CANCELLED_OUTCOMES,
         ).exists():
             return False
+        # The existing controller write lock serializes HTTP and USB writers,
+        # including SQLite (where select_for_update alone would not work).
+        # Use the same local calendar date as Records/Dashboard report_time.
+        local_zone = timezone.get_default_timezone()
+        today = timezone.localdate(timezone=local_zone)
+        start = timezone.make_aware(datetime.combine(today, time.min), local_zone)
+        end = timezone.make_aware(datetime.combine(today + timedelta(days=1), time.min), local_zone)
+        if ViolationReport.objects.filter(
+            student_id=inspection.student_id, report_time__gte=start, report_time__lt=end,
+        ).exists():
+            # Finalized without a second report; never replay this inspection
+            # tomorrow and accidentally create a delayed duplicate.
+            inspection.recorded = True
+            inspection.save(update_fields=["recorded"])
+            return False
         text = ", ".join(inspection.violations)
         for name in inspection.violations:
-            Violation.objects.create(student=inspection.student, violation_type=name, status="Unread")
-        ViolationReport.objects.create(
+            Violation.objects.create(student=inspection.student, violation_type=name,
+                                     status="Unread", inspection=inspection)
+        report = ViolationReport.objects.create(
             student=inspection.student, violation_type=text,
-            confirmed_entry=True, sent_to_osa=True,
+            confirmed_entry=True, sent_to_osa=True, inspection=inspection,
         )
+        # Queue in the SAME transaction: rollbacks discard the email too.
+        # A separate worker sees only committed rows and never stalls the gate.
+        ViolationEmail.objects.create(report=report, inspection=inspection)
         inspection.recorded = True
         inspection.save(update_fields=["recorded"])
         return True

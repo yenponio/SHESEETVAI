@@ -183,6 +183,8 @@ class DressCodeInspection:
         result = results[0]
 
         annotated = result.plot()
+        # Preserve pose/box overlays before any display/debug text is drawn.
+        evidence_frame = annotated.copy()
 
 
         if result.keypoints is None:
@@ -671,7 +673,7 @@ class DressCodeInspection:
             ):
 
                 self.finish_inspection(
-                    annotated
+                    evidence_frame
                 )
 
 
@@ -698,7 +700,7 @@ class DressCodeInspection:
 
     def finish_inspection(
         self,
-        annotated
+        evidence_frame
     ):
 
         print("")
@@ -808,12 +810,8 @@ class DressCodeInspection:
 
 
         # ==================================================
-        # DRAW FINAL RESULT BEFORE SCREENSHOT
-        # ==================================================
-
-        self.draw_final_result(
-            annotated
-        )
+        # Display overlays are drawn separately in process_frame.
+        # Evidence retains the actual camera image and pose overlays only.
 
 
         # ==================================================
@@ -822,7 +820,7 @@ class DressCodeInspection:
 
         timestamp = (
             datetime.now().strftime(
-                "%Y%m%d_%H%M%S"
+                "%Y%m%d_%H%M%S_%f"
             )
         )
 
@@ -842,7 +840,7 @@ class DressCodeInspection:
 
         success = cv2.imwrite(
             screenshot_path,
-            annotated
+            evidence_frame
         )
 
 

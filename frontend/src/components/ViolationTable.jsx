@@ -1,5 +1,10 @@
+import { useState } from "react";
+import ViolationEvidenceModal from "./ViolationEvidenceModal";
+
 export default function ViolationTable({ records, loading, error }) {
+  const [selectedRecord, setSelectedRecord] = useState(null);
   return (
+    <>
     <table>
       <thead>
         <tr>
@@ -10,7 +15,12 @@ export default function ViolationTable({ records, loading, error }) {
       <tbody>
         {records.map(record => (
           <tr key={record.id}>
-            <td>{record.studentNumber}</td><td>{record.name}</td>
+            <td>{record.studentNumber}</td>
+            <td><button type="button" className="student-link"
+              onClick={() => setSelectedRecord(record)}
+              aria-label={`View violation evidence for ${record.name} on ${record.date} at ${record.time}`}>
+              {record.name}
+            </button></td>
             <td title={record.collegeName}>{record.college}</td>
             <td>{record.violationType || "Unspecified"}</td>
             <td>{record.date}</td><td>{record.time}</td>
@@ -23,5 +33,8 @@ export default function ViolationTable({ records, loading, error }) {
         )}
       </tbody>
     </table>
+    {selectedRecord && <ViolationEvidenceModal key={selectedRecord.id}
+      record={selectedRecord} onClose={() => setSelectedRecord(null)} />}
+    </>
   );
 }

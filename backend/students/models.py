@@ -52,6 +52,11 @@ class Student(models.Model):
 # ==========================================================
 
 class Violation(models.Model):
+    inspection = models.ForeignKey(
+        "AIInspection", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="confirmed_violations",
+    )
+
     student = models.ForeignKey(
         Student,
         on_delete=models.CASCADE,
@@ -168,6 +173,11 @@ class EntryLog(models.Model):
 # ==========================================================
 
 class ViolationReport(models.Model):
+    inspection = models.ForeignKey(
+        "AIInspection", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="violation_reports",
+    )
+
     student = models.ForeignKey(
         Student,
         on_delete=models.CASCADE
@@ -373,3 +383,17 @@ class GateEvent(models.Model):
     key = models.CharField(max_length=100, primary_key=True)
     cycle = models.ForeignKey(GateCycle, on_delete=models.CASCADE)
     event = models.CharField(max_length=32)
+
+
+class ViolationEmail(models.Model):
+    """Durable delivery queue; existing violation and inspection models stay intact."""
+    report = models.OneToOneField(ViolationReport, on_delete=models.CASCADE,
+                                  related_name="email_notification")
+    inspection = models.ForeignKey(AIInspection, on_delete=models.SET_NULL,
+                                   null=True, related_name="email_notifications")
+    status = models.CharField(max_length=12, default="PENDING", db_index=True,
+                              choices=[(value, value.title()) for value in
+                                       ("PENDING", "SENDING", "SENT", "SKIPPED", "FAILED")])
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    error = models.CharField(max_length=200, blank=True)

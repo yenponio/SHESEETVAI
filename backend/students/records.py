@@ -27,9 +27,9 @@ def college_code(value):
     return value or "Unknown"
 
 
-def violation_records(school=None):
+def violation_records(school=None, request=None):
     # Do not merge the per-type Violation table or infer reports from scans.
-    reports = ViolationReport.objects.select_related("student").order_by("-report_time", "-pk")
+    reports = ViolationReport.objects.select_related("student", "inspection").order_by("-report_time", "-pk")
     records = []
     for report in reports:
         student = report.student
@@ -37,7 +37,12 @@ def violation_records(school=None):
         if school is not None and college.casefold() != college_code(school).casefold():
             continue
         occurred = timezone.localtime(report.report_time)
+        screenshot = report.inspection.screenshot if report.inspection else None
+        evidence_url = screenshot.url if screenshot else None
+        if evidence_url and request is not None:
+            evidence_url = request.build_absolute_uri(evidence_url)
         records.append({
+            "evidence_image": evidence_url,
             "id": report.pk,
             "studentNumber": student.student_number,
             "name": student.full_name,
@@ -53,12 +58,12 @@ def violation_records(school=None):
 
 @never_cache
 def records_data(request):
-    records = violation_records()
+    records = violation_records(request=request)
     schools = sorted(set(SCHOOLS) | {record["college"] for record in records})
     return JsonResponse({"records": records, "total": len(records), "schools": schools})
 
 
 @never_cache
 def school_records(request, school):
-    records = violation_records(school)
+    records = violation_records(school, request=request)
     return JsonResponse({"school": college_code(school), "records": records, "total": len(records)})
