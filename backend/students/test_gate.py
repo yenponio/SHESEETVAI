@@ -23,6 +23,9 @@ class GateIntegrationTests(TestCase):
             enabled=True, connected=True, ready=True, bridge_id="session", process_id=123,
         )
         self.running = patch("students.gate.bridge_running", return_value=True)
+        review_running = patch("students.views.bridge_running", return_value=True)
+        review_running.start()
+        self.addCleanup(review_running.stop)
         self.running.start()
         self.addCleanup(self.running.stop)
         self.sequence = 0
@@ -40,13 +43,17 @@ class GateIntegrationTests(TestCase):
         self.sequence += 1
         apply_event(session, self.attempt.pk, name, key or f"event-{self.sequence}")
 
-    def opened(self):
+    def opened(self, decision="NO"):
         self.cycle()
+        self.review(self.inspection(), decision)
         self.assertEqual(claim_open("session"), self.attempt.pk)
         self.event("OPENING")
         self.event("OPEN_ESTIMATED")
 
     def inspection(self):
+        existing = AIInspection.objects.filter(attempt=self.attempt).first()
+        if existing:
+            return existing
         response = self.client.post("/api/students/ai-result/", {
             "student_number": self.student.student_number,
             "attempt_id": self.attempt.pk,
@@ -56,9 +63,9 @@ class GateIntegrationTests(TestCase):
         self.assertEqual(response.status_code, 201, response.content)
         return AIInspection.objects.get(pk=response.json()["inspection_id"])
 
-    def review(self, inspection):
+    def review(self, inspection, decision="YES"):
         return self.client.post("/api/students/ai-inspection/review/", {
-            "inspection_id": inspection.pk, "decision": "YES",
+            "inspection_id": inspection.pk, "decision": decision,
         })
 
     def close(self):
@@ -69,7 +76,8 @@ class GateIntegrationTests(TestCase):
         self.cycle()
         self.assertFalse(self.attempt.gate_opened)
         self.assertFalse(self.attempt.entered)
-        self.assertEqual(self.attempt.gate_cycle.phase, "QUEUED")
+        self.assertEqual(self.attempt.gate_cycle.phase, "WAITING_OSA")
+        self.assertIsNone(claim_open("session"))
         self.assertEqual(EntryLog.objects.count(), 0)
 
     def test_invalid_id_does_not_queue(self):
@@ -89,6 +97,7 @@ class GateIntegrationTests(TestCase):
 
     def test_open_command_is_claimed_only_once(self):
         self.cycle()
+        self.review(self.inspection())
         self.assertEqual(claim_open("session"), self.attempt.pk)
         self.assertIsNone(claim_open("session"))
         self.assertIsNone(claim_open("different"))
@@ -107,21 +116,16 @@ class GateIntegrationTests(TestCase):
         self.assertIsNone(GateController.objects.get(pk=1).active_cycle_id)
 
     def test_confirmed_violation_waits_for_entry(self):
-        self.opened()
-        inspection = self.inspection()
-        self.assertEqual(self.review(inspection).status_code, 200)
+        self.opened("YES")
         self.assertFalse(Violation.objects.exists())
         self.event("ENTERED")
         self.assertEqual(Violation.objects.count(), 1)
         self.assertEqual(ViolationReport.objects.count(), 1)
 
-    def test_review_after_entry_saves_once(self):
-        self.opened()
-        inspection = self.inspection()
+    def test_review_after_entry_cannot_repeat_or_change_decision(self):
+        self.opened("YES")
         self.event("ENTERED")
-        self.assertFalse(Violation.objects.exists())
-        self.assertEqual(self.review(inspection).status_code, 200)
-        self.assertEqual(self.review(inspection).status_code, 400)
+        self.assertEqual(self.review(self.inspection()).status_code, 400)
         self.assertEqual(Violation.objects.count(), 1)
 
     def test_unconfirmed_violation_flag_does_not_create_report(self):
@@ -134,9 +138,8 @@ class GateIntegrationTests(TestCase):
         self.assertFalse(Violation.objects.exists())
 
     def test_walkaway_never_records_confirmed_violation(self):
-        self.opened()
+        self.opened("YES")
         inspection = self.inspection()
-        self.review(inspection)
         self.event("WALKED_AWAY")
         self.close()
         self.assertFalse(EntryLog.objects.exists())
@@ -153,13 +156,13 @@ class GateIntegrationTests(TestCase):
             "violations": ["Test"],
         }, content_type="application/json")
         self.assertTrue(response.json()["ignored"])
-        self.assertFalse(AIInspection.objects.exists())
+        self.assertEqual(AIInspection.objects.count(), 1)
 
     def test_cancelled_inspection_disappears_from_review_queue(self):
         self.opened()
         inspection = self.inspection()
         self.event("WALKED_AWAY")
-        self.assertEqual(self.review(inspection).status_code, 409)
+        self.assertEqual(self.review(inspection).status_code, 400)
         response = self.client.get("/api/students/ai-inspection/pending/")
         self.assertFalse(response.json()["success"])
 
@@ -183,8 +186,7 @@ class GateIntegrationTests(TestCase):
         self.assertFalse(EntryLog.objects.exists())
 
     def test_duplicate_entry_delivery_does_not_duplicate_records(self):
-        self.opened()
-        self.review(self.inspection())
+        self.opened("YES")
         self.event("ENTERED", key="stable-delivery")
         self.event("ENTERED", key="stable-delivery")
         self.event("ENTERED")
@@ -206,6 +208,7 @@ class GateIntegrationTests(TestCase):
 
     def test_entry_before_opening_is_rejected(self):
         self.cycle()
+        self.review(self.inspection())
         claim_open("session")
         with self.assertRaises(GateError):
             self.event("ENTERED")
@@ -222,6 +225,7 @@ class GateIntegrationTests(TestCase):
 
     def test_rejected_open_releases_without_entry(self):
         self.cycle()
+        self.review(self.inspection())
         claim_open("session")
         self.event("OPEN_REJECTED")
         self.assertEqual(self.attempt.gate_cycle.outcome, "CANCELLED")
@@ -239,6 +243,7 @@ class GateIntegrationTests(TestCase):
 
     def test_restart_cancels_uncertain_old_open_without_replay(self):
         self.cycle()
+        self.review(self.inspection())
         claim_open("session")
         with patch("students.gate.bridge_running", return_value=False):
             begin_session("new", 456)
@@ -254,11 +259,11 @@ class GateIntegrationTests(TestCase):
         self.close()
         self.assertEqual(EntryLog.objects.count(), 1)
 
-    def test_existing_software_mode_is_preserved_before_bridge_start(self):
+    def test_disabled_hardware_does_not_fabricate_opening(self):
         GateController.objects.filter(pk=1).update(enabled=False)
         response = self.scan()
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.json()["hardware_gate"])
+        self.assertEqual(response.status_code, 409)
+        self.assertFalse(AccessAttempt.objects.exists())
         self.assertFalse(GateCycle.objects.exists())
 
     def test_status_matches_exact_attempt(self):
@@ -374,6 +379,7 @@ class GateBridgeCommandTests(TestCase):
             with patch("serial.Serial", return_value=serial_port), \
                  patch("students.gate.bridge_running", side_effect=lambda c: c.connected and c.process_id == os.getpid()), \
                  patch("students.management.commands.gate_bridge.bridge_running", return_value=False), \
+                 patch("students.views.bridge_running", return_value=True), \
                  patch("sys.stdin", io.StringIO("")):
                 call_command(
                     "gate_bridge", port="SIMULATED", closed_reference=True,

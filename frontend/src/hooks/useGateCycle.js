@@ -2,22 +2,24 @@ import { useEffect, useState } from "react";
 
 export function gateCycleFinished(cycle, inspectionStatus) {
   if (!cycle || cycle.phase !== "CLOSED") return false;
-  if (["WALKED_AWAY", "CANCELLED"].includes(cycle.outcome)) return true;
+  if (["WALKED_AWAY", "CANCELLED", "DENIED"].includes(cycle.outcome)) return true;
   return cycle.outcome === "ENTERED" &&
     ["PASS", "CLEARED", "VIOLATION CONFIRMED"].includes(inspectionStatus);
 }
 
 export function gateMessage(cycle) {
   if (!cycle) return "Waiting for gate status.";
+  if (cycle.outcome === "DENIED") return "Entry denied by OSA. No official offense recorded.";
   if (cycle.phase === "CLOSED") {
     return cycle.outcome === "ENTERED"
-      ? "Entry confirmed. Finishing the inspection."
+      ? "Sensor confirmed entry. Gate cycle complete."
       : "Entry cancelled. No entry or final violation recorded.";
   }
-  if (!cycle.connected) return "Gate connection lost. Please ask the operator for assistance.";
+  if (!cycle.connected) return `Gate connection lost. ${cycle.message || "Please ask the operator for assistance."}`;
   if (cycle.outcome === "UNCERTAIN") return "Passage was not confirmed. Please ask the operator for assistance.";
   if (cycle.message === "CLOSE_PAUSED") return "Gate closing paused. Please clear the passage.";
-  if (cycle.phase === "QUEUED" || cycle.phase === "SENT") return "Valid ID. Waiting for the gate.";
+  if (cycle.phase === "WAITING_OSA") return "Gate closed. Waiting for AI inspection and OSA decision.";
+  if (cycle.phase === "QUEUED" || cycle.phase === "SENT") return "OSA allowed entry. Waiting for gate acknowledgement.";
   if (cycle.phase === "OPENING") return "Gate opening. Please wait.";
   if (cycle.phase === "CLOSING") return "Passage completed. Gate closing.";
   return "Gate open. Please pass through.";
@@ -54,5 +56,5 @@ export default function useGateCycle(attemptId) {
       clearTimeout(timer);
     };
   }, [attemptId]);
-  return result?.attemptId === attemptId ? result : { cycle: null, error: "" };
+  return result && result.attemptId === attemptId ? result : { cycle: null, error: "" };
 }

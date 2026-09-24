@@ -10,6 +10,7 @@ from django.views.static import serve
 from django.test import RequestFactory
 from PIL import Image
 
+from .models import GateCycle, GateController
 from .gate import save_violation
 from .models import Student, AccessAttempt, AIInspection, Violation, ViolationReport, ViolationEmail, GateController
 from .notifications import deliver_notification
@@ -30,20 +31,18 @@ class EvidenceTests(TransactionTestCase):
 
     def capture(self, student=None, color="red", confirmed=True):
         student = student or self.student
-        attempt = AccessAttempt.objects.create(student=student, entered=True)
+        attempt = AccessAttempt.objects.create(student=student, entered=True, gate_opened=True)
+        GateCycle.objects.create(attempt=attempt, phase="CLOSED", outcome="ENTERED")
         inspection = AIInspection.objects.create(student=student, attempt=attempt,
-            confirmation_status="CONFIRMED" if confirmed else "PENDING", violations=["Knees exposed"])
+            confirmation_status="CONFIRMED_ALLOW" if confirmed else "PENDING", violations=["Knees exposed"])
         data = io.BytesIO()
         Image.new("RGB", (20, 30), color).save(data, format="PNG")
         inspection.screenshot.save("evidence.png", ContentFile(data.getvalue()))
         return inspection, data.getvalue()
 
     def test_osa_review_exact_link_media_and_email(self):
-        inspection, data = self.capture(confirmed=False)
-        self.assertFalse(save_violation(inspection.pk))
-        response = self.client.post("/api/students/ai-inspection/review/", {
-            "inspection_id": inspection.pk, "decision": "YES"})
-        self.assertEqual(response.status_code, 200)
+        inspection, data = self.capture()
+        self.assertTrue(save_violation(inspection.pk))
         report = ViolationReport.objects.get()
         self.assertEqual(report.inspection_id, inspection.pk)
         self.assertEqual(Violation.objects.get().inspection_id, inspection.pk)
@@ -87,7 +86,7 @@ class EvidenceTests(TransactionTestCase):
         self.assertEqual(Violation.objects.count(), 3)
 
     def test_old_records_and_deleted_inspection_are_null(self):
-        report = ViolationReport.objects.create(student=self.student, violation_type="Historical")
+        report = ViolationReport.objects.create(student=self.student, violation_type="Historical", confirmed_entry=True)
         self.capture()  # Unrelated evidence must never be guessed.
         row = self.client.get("/api/students/records/").json()["records"][0]
         self.assertIsNone(row["evidence_image"])

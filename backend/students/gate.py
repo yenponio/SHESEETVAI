@@ -15,7 +15,7 @@ from .models import (
     GateEvent, Violation, ViolationReport, ViolationEmail,
 )
 
-CANCELLED_OUTCOMES = ("WALKED_AWAY", "CANCELLED", "UNCERTAIN")
+CANCELLED_OUTCOMES = ("WALKED_AWAY", "CANCELLED", "UNCERTAIN", "DENIED")
 DEVICE_EVENTS = {
     "OPENING", "OPEN_ESTIMATED", "AT_A", "BOTH_DETECTED", "AT_B",
     "ENTERED", "WALKED_AWAY", "PASSAGE_UNCERTAIN", "CANCELLED",
@@ -55,9 +55,7 @@ def bridge_running(controller):
 
 def queue_attempt(student):
     with locked_controller() as controller:
-        if not controller.enabled:
-            return AccessAttempt.objects.create(student=student, gate_opened=True), False
-        if not controller.ready or not bridge_running(controller):
+        if not controller.enabled or not controller.ready or not bridge_running(controller):
             raise GateError("Gate is offline. Please ask the operator for assistance.",
                             "GATE_OFFLINE")
         if controller.active_cycle_id:
@@ -110,7 +108,9 @@ def claim_open(bridge_id):
                 not controller.connected or not controller.active_cycle_id):
             return None
         cycle = GateCycle.objects.get(pk=controller.active_cycle_id)
-        if cycle.phase != "QUEUED":
+        if cycle.phase != "QUEUED" or not AIInspection.objects.filter(
+            attempt_id=cycle.pk, confirmation_status__in=("CONFIRMED_ALLOW", "REJECTED"),
+        ).exists():
             return None
         cycle.phase = "SENT"
         cycle.bridge_id = bridge_id
@@ -121,11 +121,13 @@ def claim_open(bridge_id):
 def save_violation(inspection_id):
     with locked_controller():
         inspection = AIInspection.objects.select_related("attempt", "student").get(pk=inspection_id)
-        if (inspection.confirmation_status != "CONFIRMED" or inspection.recorded or
-                not inspection.attempt_id or not inspection.attempt.entered):
+        if (inspection.confirmation_status != "CONFIRMED_ALLOW" or inspection.recorded or
+                not inspection.attempt_id or not inspection.attempt.entered or
+                not inspection.attempt.gate_opened or
+                inspection.student_id != inspection.attempt.student_id):
             return False
-        if GateCycle.objects.filter(
-            attempt_id=inspection.attempt_id, outcome__in=CANCELLED_OUTCOMES,
+        if not GateCycle.objects.filter(
+            attempt_id=inspection.attempt_id, outcome="ENTERED",
         ).exists():
             return False
         # The existing controller write lock serializes HTTP and USB writers,
@@ -136,17 +138,16 @@ def save_violation(inspection_id):
         start = timezone.make_aware(datetime.combine(today, time.min), local_zone)
         end = timezone.make_aware(datetime.combine(today + timedelta(days=1), time.min), local_zone)
         if ViolationReport.objects.filter(
-            student_id=inspection.student_id, report_time__gte=start, report_time__lt=end,
+            student_id=inspection.student_id, confirmed_entry=True, report_time__gte=start, report_time__lt=end,
         ).exists():
             # Finalized without a second report; never replay this inspection
             # tomorrow and accidentally create a delayed duplicate.
             inspection.recorded = True
             inspection.save(update_fields=["recorded"])
             return False
-        text = ", ".join(inspection.violations)
-        for name in inspection.violations:
-            Violation.objects.create(student=inspection.student, violation_type=name,
-                                     status="Unread", inspection=inspection)
+        text = ", ".join(inspection.violations) or "OSA-confirmed dress-code violation"
+        Violation.objects.create(student=inspection.student, violation_type=text,
+                                 status="Unread", inspection=inspection)
         report = ViolationReport.objects.create(
             student=inspection.student, violation_type=text,
             confirmed_entry=True, sent_to_osa=True, inspection=inspection,
@@ -232,7 +233,7 @@ def apply_event(bridge_id, attempt_id, event, event_key):
         GateEvent.objects.create(key=event_key, cycle=cycle, event=event)
         if event == "ENTERED":
             for inspection in AIInspection.objects.filter(
-                attempt_id=attempt_id, confirmation_status="CONFIRMED", recorded=False,
+                attempt_id=attempt_id, confirmation_status="CONFIRMED_ALLOW", recorded=False,
             ):
                 save_violation(inspection.pk)
         if cycle.phase == "CLOSED" and controller.active_cycle_id == attempt_id:
@@ -247,4 +248,8 @@ def cycle_status(attempt_id):
         "success": True, "attempt_id": cycle.pk, "phase": cycle.phase,
         "outcome": cycle.outcome, "message": cycle.message,
         "connected": bridge_running(controller),
+        "gate_opened": cycle.attempt.gate_opened,
+        "entered": cycle.attempt.entered,
+        "confirmation_status": AIInspection.objects.filter(attempt_id=attempt_id)
+            .values_list("confirmation_status", flat=True).first(),
     }

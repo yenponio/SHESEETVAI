@@ -17,11 +17,13 @@ from .models import (
     ViolationReport,
     Violation,
     AIInspection,
+    GateController,
+    GateCycle,
 )
 
 from .serializers import StudentSerializer
 from .gate import (GateError, queue_attempt, save_violation, lock_database,
-                   cancelled_attempt, CANCELLED_OUTCOMES)
+                   cancelled_attempt, CANCELLED_OUTCOMES, bridge_running)
 
 
 # =========================================================
@@ -137,7 +139,7 @@ class BarcodeScanView(APIView):
                 student.full_name
             )
 
-            # Valid ID queues one exact-attempt command when the USB bridge is enabled.
+            # Valid ID reserves a closed gate cycle; only OSA can queue OPEN.
             try:
                 attempt, hardware_gate = queue_attempt(student)
             except GateError as error:
@@ -262,22 +264,22 @@ def receive_ai_result(request):
     # AI RESULT = VIOLATION
     # =====================================================
 
-    if result_status == "VIOLATION":
+    if result_status in ("VIOLATION", "PASS"):
 
         # AI result is only suspected.
         # OSA must confirm before it becomes a real violation.
         inspection = AIInspection.objects.create(
             student=student,
             attempt=attempt,
-            ai_result="VIOLATION",
-            violations=violations,
+            ai_result=result_status,
+            violations=violations if result_status == "VIOLATION" else [],
             screenshot=screenshot,
             confirmation_status="PENDING"
         )
 
         print("")
         print("========================================")
-        print("AI VIOLATION RECEIVED BY DJANGO")
+        print("AI RESULT RECEIVED BY DJANGO:", result_status)
         print("Student:", student.student_number)
         print("Inspection ID:", inspection.id)
         print("Violations:", violations)
@@ -289,7 +291,7 @@ def receive_ai_result(request):
             {
                 "success": True,
                 "message": (
-                    "Violation sent to OSA "
+                    "AI result sent to OSA "
                     "for confirmation"
                 ),
                 "inspection_id": inspection.id,
@@ -298,32 +300,6 @@ def receive_ai_result(request):
                 )
             },
             status=status.HTTP_201_CREATED
-        )
-
-    # =====================================================
-    # AI RESULT = PASS
-    # =====================================================
-
-    elif result_status == "PASS":
-        attempt.has_violation = False
-        attempt.violation_type = ""
-        if not hasattr(attempt, "gate_cycle"):
-            attempt.gate_opened = True
-        attempt.save()
-
-        print("")
-        print("========================================")
-        print("AI PASS RECEIVED BY DJANGO")
-        print("Student:", student.student_number)
-        print("========================================")
-
-        return Response(
-            {
-                "success": True,
-                "message": "Student passed dress code",
-                "status": "PASS"
-            },
-            status=status.HTTP_200_OK
         )
 
     return Response(
@@ -402,9 +378,8 @@ def latest_pending_inspection(request):
 # 1. OSA confirmed it.
 # 2. Student actually entered campus.
 #
-# This function can safely be called from both:
-# - OSA confirmation
-# - ultrasonic entry confirmation
+# Compatibility wrapper for internal callers; all finalization guards live in
+# gate.save_violation. The OSA review endpoint never calls this function.
 #
 # =========================================================
 
@@ -437,131 +412,57 @@ def review_ai_inspection(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    if decision not in ["YES", "NO"]:
-        return Response(
-            {
-                "success": False,
-                "message": "decision must be YES or NO"
-            },
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    # Find inspection
+    if decision not in ("YES", "NO", "DENY"):
+        return Response({"success": False, "message": "decision must be YES, NO or DENY"}, status=400)
     try:
-        inspection = AIInspection.objects.select_related(
-            "student",
-            "attempt"
-        ).get(id=inspection_id)
-
-    except AIInspection.DoesNotExist:
-        return Response(
-            {
-                "success": False,
-                "message": "AI inspection not found"
-            },
-            status=status.HTTP_404_NOT_FOUND
-        )
-
-    if cancelled_attempt(inspection.attempt_id):
-        return Response({"success": False, "message": "This student did not complete entry"}, status=409)
-
-    # Prevent double review
+        inspection = AIInspection.objects.select_related("attempt", "student").get(pk=inspection_id)
+    except (AIInspection.DoesNotExist, ValueError, TypeError):
+        return Response({"success": False, "message": "AI inspection not found"}, status=404)
+    # Serialized by the controller write lock; retries cannot authorize another OPEN.
     if inspection.confirmation_status != "PENDING":
-        return Response(
-            {
-                "success": False,
-                "message": (
-                    "Inspection has already been reviewed"
-                ),
-                "confirmation_status": (
-                    inspection.confirmation_status
-                )
-            },
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    student = inspection.student
+        return Response({"success": False, "message": "Inspection has already been reviewed",
+                         "confirmation_status": inspection.confirmation_status}, status=400)
     attempt = inspection.attempt
-
-    # =====================================================
-    # OSA PRESSES YES
-    # =====================================================
-
-    if decision == "YES":
-        inspection.confirmation_status = "CONFIRMED"
-        inspection.reviewed_at = timezone.now()
-        inspection.save()
-
-        violation_text = ", ".join(
-            inspection.violations
-        )
-
-        if attempt:
-            attempt.has_violation = True
-            attempt.violation_type = violation_text
-
-            # A violation does NOT block campus entry.
-            if not hasattr(attempt, "gate_cycle"):
-                attempt.gate_opened = True
-            attempt.save()
-
-        # This only saves permanently if the student
-        # has already entered campus.
-        save_confirmed_violation_if_ready(
-            inspection
-        )
-
-        print("")
-        print("========================================")
-        print("OSA CONFIRMED VIOLATION")
-        print("Student:", student.student_number)
-        print("Violations:", inspection.violations)
-        print("========================================")
-
-        return Response({
-            "success": True,
-            "decision": "YES",
-            "confirmation_status": "CONFIRMED",
-            "message": "Violation confirmed by OSA"
-        })
-
-    # =====================================================
-    # OSA PRESSES NO
-    # =====================================================
-
-    inspection.confirmation_status = "REJECTED"
+    cycle = GateCycle.objects.filter(attempt=attempt).first() if attempt else None
+    controller = GateController.objects.get(pk=1)
+    if (not cycle or cycle.phase != "WAITING_OSA" or cycle.outcome != "PENDING" or
+            controller.active_cycle_id != cycle.pk or attempt.entered or attempt.gate_opened):
+        return Response({"success": False, "message": "Attempt is no longer awaiting OSA review"}, status=409)
+    if decision != "DENY" and (not controller.enabled or not controller.ready or
+                               not bridge_running(controller)):
+        return Response({"success": False, "code": "GATE_OFFLINE",
+                         "message": "Gate is offline. Decision not saved; ask the operator for assistance."}, status=409)
+    inspection.confirmation_status = {
+        "YES": "CONFIRMED_ALLOW", "NO": "REJECTED", "DENY": "CONFIRMED_DENY",
+    }[decision]
     inspection.reviewed_at = timezone.now()
-    inspection.save()
-
-    if attempt:
-        attempt.has_violation = False
-        attempt.violation_type = ""
-        if not hasattr(attempt, "gate_cycle"):
-            attempt.gate_opened = True
-        attempt.save()
-
-    print("")
-    print("========================================")
-    print("OSA REJECTED AI VIOLATION")
-    print("Student:", student.student_number)
-    print("False detection - student cleared.")
-    print("========================================")
-
-    return Response({
-        "success": True,
-        "decision": "NO",
-        "confirmation_status": "REJECTED",
-        "message": "AI detection rejected by OSA"
-    })
+    inspection.save(update_fields=["confirmation_status", "reviewed_at"])
+    attempt.has_violation = decision != "NO"
+    attempt.violation_type = (", ".join(inspection.violations) or "OSA-confirmed dress-code violation") if decision != "NO" else ""
+    attempt.save(update_fields=["has_violation", "violation_type"])
+    if decision == "DENY":
+        cycle.phase, cycle.outcome = "CLOSED", "DENIED"
+        cycle.message = "OSA denied entry. No official offense recorded."
+        controller.active_cycle = None
+        controller.save(update_fields=["active_cycle"])
+    else:
+        cycle.phase = "QUEUED"
+        cycle.message = "OSA authorized opening; waiting for Uno acknowledgement."
+    cycle.save(update_fields=["phase", "outcome", "message"])
+    # No offense finalization here: only sensor-confirmed ENTERED can do that.
+    return Response({"success": True, "decision": decision,
+                     "attempt_id": attempt.pk,
+                     "confirmation_status": inspection.confirmation_status,
+                     "gate_opened": False, "entered": False,
+                     "message": cycle.message})
 
 
 # =========================================================
 # CONFIRM ENTRY
 # =========================================================
 #
-# Eventually this endpoint will be triggered when the
-# Arduino/HC-SR04 confirms that the student actually
-# passed through the gate.
+# Browser entry assertions are forbidden. The local Uno bridge processes
+# HC-SR04 events through gate.apply_event instead.
 #
 # =========================================================
 

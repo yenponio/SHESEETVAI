@@ -14,7 +14,7 @@ from django.db import DatabaseError
 from students.gate import (
     GateError, apply_event, begin_session, bridge_running, claim_open, end_session,
 )
-from students.models import GateController
+from students.models import GateController, AccessAttempt, GateCycle
 from students.gate_protocol import EventJournal, LineFramer, parse_event
 
 
@@ -73,6 +73,8 @@ class Command(BaseCommand):
         shared = {"active_attempt": None, "status_seen": time.monotonic()}
         reader = None
         registered = False
+        open_deadline = None
+        shutdown_message = "USB bridge stopped; operator assistance required."
 
         def operator_input():
             for line in sys.stdin:
@@ -80,7 +82,7 @@ class Command(BaseCommand):
                 if command in ("CLOSE", "STATUS"):
                     operator_commands.put(command)
                 elif command:
-                    self.stdout.write("Only CLOSE or STATUS is accepted here. Scan an ID to open.")
+                    self.stdout.write("Only CLOSE or STATUS is accepted here. OSA must authorize opening after inspection.")
                 if stop.is_set():
                     return
 
@@ -98,7 +100,7 @@ class Command(BaseCommand):
                 begin_session(session, os.getpid())
                 registered = True
                 self.stdout.write(self.style.SUCCESS(
-                    "GATE READY. A valid ID scan will open it. "
+                    "GATE READY. Opening requires an OSA allow decision. "
                     "For an uncertain passage, clear both sensors and type CLOSE here."
                 ))
 
@@ -136,11 +138,20 @@ class Command(BaseCommand):
                     # Database contention retries the same durable events, never OPEN.
                     try:
                         replay(journal)
+                        if open_deadline is not None and time.monotonic() >= open_deadline:
+                            if not AccessAttempt.objects.filter(
+                                pk=shared["active_attempt"], gate_opened=True,
+                            ).exists() and not GateCycle.objects.filter(
+                                pk=shared["active_attempt"], phase="CLOSED",
+                            ).exists():
+                                raise CommandError("Uno did not acknowledge opening within 15 seconds; inspect the gate before restarting.")
+                            open_deadline = None
                         if not journal.pending():
                             attempt = claim_open(session)
                             if attempt is not None:
                                 shared["active_attempt"] = attempt
                                 write_command(port, f"OPEN {attempt}")
+                                open_deadline = time.monotonic() + 15
                     except DatabaseError:
                         # Keep draining USB in the reader while database writes retry.
                         pass
@@ -157,7 +168,8 @@ class Command(BaseCommand):
                     raise CommandError(str(failures.get()))
         except KeyboardInterrupt:
             self.stdout.write("Bridge stopped. The gate was not forced closed.")
-        except (serial.SerialException, OSError, ValueError, GateError) as error:
+        except (serial.SerialException, OSError, ValueError, GateError, CommandError) as error:
+            shutdown_message = str(error)
             raise CommandError(str(error)) from error
         finally:
             stop.set()
@@ -170,6 +182,6 @@ class Command(BaseCommand):
                 except Exception as error:
                     self.stderr.write(f"Events remain pending for recovery: {error}")
                 try:
-                    end_session(session, "USB bridge stopped; operator assistance required.")
+                    end_session(session, shutdown_message)
                 except DatabaseError:
                     self.stderr.write("Could not mark bridge offline; stopped process will be detected.")

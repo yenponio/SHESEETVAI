@@ -1,244 +1,35 @@
-import "./../styles/Dashboard.css";
-import { useState } from "react";
+import { Link } from "react-router-dom";
 import useLiveData from "../hooks/useLiveData";
-import Sidebar from "../components/Sidebar";
-import { useNavigate } from "react-router-dom";
-import SearchBar from "../components/dashboard/SearchBar";
 import StatCard from "../components/dashboard/StatCard";
 import CollegeChart from "../components/dashboard/CollegeChart";
 import ComplianceChart from "../components/dashboard/ComplianceChart";
-
-import {
-  FaUserGraduate,
-  FaClock,
-  FaCalendarAlt,
-} from "react-icons/fa";
-
-
-function Dashboard() {
-  const navigate = useNavigate();
-  const { data: dashboardData, error } = useLiveData("http://127.0.0.1:8000/api/students/dashboard/");
-  const [search, setSearch] = useState("");
-
-
-  const filteredLogs =
-    dashboardData?.recent_logs.filter((student) =>
-      student.studentNumber
-        .toLowerCase()
-        .includes(search.toLowerCase())
-
-      ||
-
-      student.name
-        .toLowerCase()
-        .includes(search.toLowerCase())
-
-      ||
-
-      student.college
-        .toLowerCase()
-        .includes(search.toLowerCase())
-
-    ) || [];
-
-
-
-  return (
-
-    <>
-      <Sidebar />
-
-      <div className="dashboard">
-
-
-        <div className="dashboard-header">
-          <h1>OSA Dresscode Violation Tracker</h1>
-        </div>
-
-
-        {error && <p role="alert">{error}</p>}
-
-        <SearchBar
-          search={search}
-          setSearch={setSearch}
-        />
-
-
-
-        {/* STAT CARDS */}
-        <div className="stats-container">
-
-          <StatCard
-            title="STUDENTS TODAY"
-            value={
-              dashboardData
-                ? dashboardData.students_today
-                : "Loading..."
-            }
-            icon={<FaUserGraduate />}
-          />
-
-
-          <StatCard
-            title="AVERAGE SCAN TIME"
-            value={
-              dashboardData
-                ? dashboardData.average_scan_time
-                : "Loading..."
-            }
-            icon={<FaClock />}
-          />
-
-
-          <StatCard
-            title="VIOLATION RECORDS (ALL TIME)"
-            value={dashboardData ? dashboardData.total_violations : "Loading..."}
-            icon={<FaCalendarAlt />}
-          />
-
-        </div>
-
-
-
-        {/* CHARTS */}
-        <div className="charts-container">
-          {!dashboardData ? <p>{error ? "Charts are unavailable." : "Loading charts..."}</p> : <>
-
-
-          <div className="chart-card">
-
-            <CollegeChart
-              data={
-                dashboardData?.college_chart || []
-              }
-            />
-
-          </div>
-
-
-
-          <div className="chart-card">
-
-            <ComplianceChart data={dashboardData?.compliance_chart || []} />
-
-          </div>
-
-
-          </>}
-        </div>
-
-
-
-
-        {/* RECENT LOGS */}
-        <div className="table-card">
-
-
-          <div className="table-header">
-
-            <h2>
-              Recent Scan Logs
-            </h2>
-
-
-            <button
-              onClick={() => navigate("/scan-history")}
-            >
-              View All Logs
-            </button>
-
-          </div>
-
-
-
-          {!dashboardData && (
-            <p>
-              Loading dashboard...
-            </p>
-          )}
-
-
-
-          {dashboardData && (
-
-            <table>
-
-              <thead>
-
-                <tr>
-                  <th>Student Number</th>
-                  <th>Name</th>
-                  <th>College</th>
-                  <th>Status</th>
-                </tr>
-
-              </thead>
-
-
-              <tbody>
-
-                {filteredLogs.length > 0 ? (
-
-                  filteredLogs.map((student,index)=>(
-
-                    <tr key={index}>
-
-                      <td>
-                        {student.studentNumber}
-                      </td>
-
-                      <td>
-                        {student.name}
-                      </td>
-
-                      <td>
-                        {student.college}
-                      </td>
-
-                      <td
-                        className={
-                          student.status === "No Violation"
-                            ? "granted"
-                            : "violation"
-                        }
-                      >
-                        {student.status}
-                      </td>
-
-                    </tr>
-
-                  ))
-
-                ) : (
-
-                  <tr>
-
-                    <td colSpan="4">
-                      No student found
-                    </td>
-
-                  </tr>
-
-                )}
-
-              </tbody>
-
-
-            </table>
-
-          )}
-
-
-        </div>
-
-
-      </div>
-
-    </>
-
-  );
-
+import { PageHeading, StatusBadge, EmptyState, LoadingState, ErrorState, Icon } from "../components/UI";
+import { gateMessage } from "../hooks/useGateCycle";
+const API = "http://127.0.0.1:8000/api/students/";
+export default function Dashboard() {
+  const { data, error } = useLiveData(`${API}dashboard/`);
+  const system = useLiveData(`${API}system-status/`);
+  const camera = useLiveData("http://127.0.0.1:5000/camera-status");
+  const unavailable = system.error ? "Unavailable" : "Loading...";
+  return <><PageHeading title="Campus overview" description="A clear view of today's activity and official dress-code records."><Link className="btn btn-primary" to="/chatbot"><Icon name="camera-video" />Open live review</Link></PageHeading>
+    <ErrorState error={error || system.error} />
+    <div className="row g-3 mb-4">
+      <div className="col-6 col-xl-3"><StatCard title="ID scans today" value={system.data?.scans_today ?? unavailable} icon="upc-scan" help="All recorded scan attempts" /></div>
+      <div className="col-6 col-xl-3"><StatCard title="Official offenses today" value={data?.violations_today ?? (error ? "Unavailable" : "Loading...")} icon="journal-check" help="Confirmed and entered" /></div>
+      <div className="col-6 col-xl-3"><StatCard title="Confirmed entries today" value={system.data?.entries_today ?? unavailable} icon="door-open" help="Sensor-confirmed passage" /></div>
+      <div className="col-6 col-xl-3"><StatCard title="Denied attempts today" value={system.data?.denied_today ?? unavailable} icon="shield-x" help="Excluded from offenses" /></div>
+    </div>
+    <div className="row g-4 mb-4"><div className="col-lg-7"><div className="card h-100"><div className="card-body">{data ? <CollegeChart data={data.college_chart} /> : error ? <EmptyState title="Statistics unavailable" /> : <LoadingState />}</div></div></div>
+      <div className="col-lg-5"><div className="card h-100"><div className="card-body">{data ? <ComplianceChart data={data.compliance_chart} /> : error ? <EmptyState title="Summary unavailable" /> : <LoadingState />}</div></div></div></div>
+    <div className="row g-4 mb-4"><div className="col-xl-8"><section className="card h-100"><div className="card-body"><div className="d-flex justify-content-between align-items-center gap-3 mb-3"><h2 className="mb-0">Recent campus entries</h2><Link to="/scan-history" className="btn btn-outline-primary btn-sm">View logs</Link></div>
+      <div className="table-responsive"><table className="table"><thead><tr><th>Student</th><th>School</th><th>Official history</th><th>Entry time</th></tr></thead><tbody>{data?.recent_logs.map((item, index) => <tr key={`${item.studentNumber}-${item.time}-${index}`}><td><strong>{item.name}</strong><div className="small text-muted">{item.studentNumber}</div></td><td>{item.college}</td><td><StatusBadge icon="journal">{item.status}</StatusBadge></td><td className="text-nowrap">{new Date(item.time).toLocaleTimeString("en-PH", { timeZone:"Asia/Manila", hour:"2-digit", minute:"2-digit" })}</td></tr>)}</tbody></table></div>
+      {data && !data.recent_logs.length && <EmptyState title="No campus entries yet" />}{!data && !error && <LoadingState />}</div></section></div>
+      <div className="col-xl-4"><section className="card h-100"><div className="card-body"><h2 className="mb-3">System connections</h2><div className="d-grid gap-3">
+        <div className="summary-line"><span>Arduino Uno</span><StatusBadge icon="usb-symbol">{system.error ? "Unavailable" : system.data ? system.data.arduino_connected ? "Connected" : "Offline" : "Checking..."}</StatusBadge></div>
+        <div className="summary-line"><span>Camera service</span><StatusBadge icon="camera-video">{camera.error ? "Unavailable" : camera.data ? camera.data.active ? "Streaming" : "Idle" : "Checking..."}</StatusBadge></div>
+        <div className="summary-line"><span>SMTP configuration</span><StatusBadge icon="envelope">{system.data ? system.data.smtp_configured ? "Configured" : "Not configured" : unavailable}</StatusBadge></div></div>
+        <p className="small text-muted mt-3 mb-0">{system.data?.active_cycle ? gateMessage(system.data.active_cycle) : "No active gate attempt reported."}</p><Link to="/settings" className="btn btn-link mt-2">Connection details</Link></div></section></div></div>
+    <section className="card"><div className="card-body"><h2>Recent AI inspections</h2><p className="small text-muted">Review activity only. These are not automatically official offenses.</p>
+      <div className="table-responsive"><table className="table"><thead><tr><th>Student</th><th>AI result</th><th>OSA decision</th><th>Captured (Manila)</th></tr></thead><tbody>{system.data?.recent_detections.map(item => <tr key={item.id}><td>{item.name}<div className="small text-muted">{item.student_number}</div></td><td><StatusBadge icon="camera">{item.ai_result}</StatusBadge></td><td>{item.decision.replaceAll("_", " ")}</td><td>{new Date(item.detected_at).toLocaleString("en-PH", {timeZone:"Asia/Manila"})}</td></tr>)}</tbody></table></div>{system.data && !system.data.recent_detections.length && <EmptyState title="No inspections yet" />}</div></section>
+  </>;
 }
-
-
-export default Dashboard;

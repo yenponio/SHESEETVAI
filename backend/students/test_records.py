@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
+from .models import GateCycle, GateController
 from .gate import save_violation
 from .models import Student, ViolationReport, Violation, AccessAttempt, AIInspection
 
@@ -15,7 +16,7 @@ class RecordsDashboardTests(TestCase):
         )
 
     def report(self, text="Dress code"):
-        return ViolationReport.objects.create(student=self.student, violation_type=text)
+        return ViolationReport.objects.create(student=self.student, violation_type=text, confirmed_entry=True)
 
     def assert_totals(self, expected):
         records = self.client.get("/api/students/records/").json()
@@ -77,20 +78,21 @@ class RecordsDashboardTests(TestCase):
         self.assertEqual(dashboard["college_chart"][0]["college"], "New School")
 
     def test_repeat_save_does_not_duplicate_report(self):
-        attempt = AccessAttempt.objects.create(student=self.student, entered=True)
+        attempt = AccessAttempt.objects.create(student=self.student, entered=True, gate_opened=True)
+        GateCycle.objects.create(attempt=attempt, phase="CLOSED", outcome="ENTERED")
         inspection = AIInspection.objects.create(
-            student=self.student, attempt=attempt, confirmation_status="CONFIRMED",
+            student=self.student, attempt=attempt, confirmation_status="CONFIRMED_ALLOW",
             violations=["Shoulders", "Knees"],
         )
         self.assertTrue(save_violation(inspection.pk))
         self.assertFalse(save_violation(inspection.pk))
-        self.assertEqual(Violation.objects.count(), 2)
+        self.assertEqual(Violation.objects.count(), 1)
         self.assert_totals(1)
 
     def test_compliance_counts_students_once_and_status_matches(self):
         other = Student.objects.create(student_number="CLEAR", full_name="Clear Student",
                                        email="clear@example.test", college="SOC")
-        AccessAttempt.objects.create(student=self.student, entered=True)
+        AccessAttempt.objects.create(student=self.student, entered=True, gate_opened=True)
         AccessAttempt.objects.create(student=other, entered=True)
         first = self.report("Shoulders")
         second = self.report("Knees")
@@ -113,11 +115,13 @@ class RecordsDashboardTests(TestCase):
     def test_pending_queue_skips_orphans_and_review_advances(self):
         orphan = AIInspection.objects.create(student=self.student, violations=["Old capture"])
         attempt = AccessAttempt.objects.create(student=self.student)
+        cycle = GateCycle.objects.create(attempt=attempt)
+        GateController.objects.filter(pk=1).update(active_cycle=cycle)
         current = AIInspection.objects.create(student=self.student, attempt=attempt, violations=["Knees"])
         pending = self.client.get("/api/students/ai-inspection/pending/").json()
         self.assertEqual(pending["inspection"]["id"], current.pk)
         response = self.client.post("/api/students/ai-inspection/review/", {
-            "inspection_id": current.pk, "decision": "YES",
+            "inspection_id": current.pk, "decision": "DENY",
         })
         self.assertEqual(response.status_code, 200)
         self.assertFalse(self.client.get("/api/students/ai-inspection/pending/").json()["success"])

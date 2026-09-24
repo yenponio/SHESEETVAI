@@ -1,38 +1,10 @@
-import { useEffect, useRef, useState } from "react";
-
+import Modal from "./Modal";
+import EvidenceImage from "./EvidenceImage";
+import { Detail, StatusBadge } from "./UI";
 export default function ViolationEvidenceModal({ record, onClose }) {
-  const dialogRef = useRef(null);
-  const [imageFailed, setImageFailed] = useState(false);
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    const opener = document.activeElement;
-    dialog.showModal();
-    return () => {
-      dialog.close();
-      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
-    };
-  }, []);
-
-  return (
-    <dialog ref={dialogRef} className="evidence-modal" aria-labelledby="evidence-title"
-      onCancel={event => { event.preventDefault(); onClose(); }}>
-      <div className="evidence-header">
-        <h2 id="evidence-title">Violation Evidence</h2>
-        <button type="button" className="view-btn" onClick={onClose} autoFocus>Close</button>
-      </div>
-      <dl className="evidence-details">
-        <dt>Student</dt><dd>{record.name}</dd>
-        <dt>Student Number</dt><dd>{record.studentNumber}</dd>
-        <dt>School</dt><dd>{record.collegeName || record.college}</dd>
-        <dt>Violation</dt><dd>{record.violationType || "Unspecified"}</dd>
-        <dt>Date/Time (Manila)</dt><dd>{record.date} {record.time}</dd>
-      </dl>
-      {record.evidence_image && !imageFailed ? (
-        <img className="evidence-image" src={record.evidence_image}
-          alt={`Violation evidence for ${record.name} on ${record.date} at ${record.time}`}
-          onError={() => setImageFailed(true)} />
-      ) : <p role="status">No evidence image available.</p>}
-    </dialog>
-  );
+  return <Modal large title="Official violation evidence" onClose={onClose} footer={<button className="btn btn-outline-primary" onClick={onClose}>Close details</button>}>
+    <dl className="detail-list mb-4"><Detail label="Student">{record.name}</Detail><Detail label="Student ID">{record.studentNumber}</Detail><Detail label="College / school">{record.collegeName || record.college}</Detail><Detail label="Violation">{record.violationType || "Unspecified"}</Detail><Detail label="Recorded (Manila)">{record.date} | {record.time}</Detail><Detail label="OSA decision">{record.osa_decision?.replaceAll("_"," ") || "Not recorded in legacy history"}</Detail><Detail label="Current minor offenses">{record.total_minor_offenses}</Detail><Detail label="Equivalent major offenses">{record.equivalent_major_offenses}</Detail></dl>
+    <div className="d-flex flex-wrap gap-2 mb-3">{record.confirmed_entry && <StatusBadge icon="door-open">Sensor-confirmed entry</StatusBadge>}<StatusBadge icon="envelope">Email: {record.email_status || "No delivery record"}</StatusBadge></div>
+    <EvidenceImage src={record.evidence_image} alt={`Recorded violation evidence for ${record.name} on ${record.date} at ${record.time}`} />
+  </Modal>;
 }

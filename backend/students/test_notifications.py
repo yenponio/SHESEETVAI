@@ -12,6 +12,7 @@ from django.test import TransactionTestCase, override_settings
 from django.utils import timezone
 from PIL import Image
 
+from .models import GateCycle, GateController
 from .gate import save_violation
 from .models import (Student, AccessAttempt, AIInspection, Violation, ViolationReport,
                      ViolationEmail, GateController, GateCycle, EntryLog)
@@ -32,9 +33,10 @@ class NotificationTests(TransactionTestCase):
         self.addCleanup(self.media.disable)
         mail.outbox = []
 
-    def inspection(self, student=None, state="CONFIRMED", entered=True, types=None):
+    def inspection(self, student=None, state="CONFIRMED_ALLOW", entered=True, types=None):
         student = student or self.student
-        attempt = AccessAttempt.objects.create(student=student, entered=entered)
+        attempt = AccessAttempt.objects.create(student=student, entered=entered, gate_opened=True)
+        GateCycle.objects.create(attempt=attempt, phase="CLOSED", outcome="ENTERED" if entered else "PENDING")
         return AIInspection.objects.create(student=student, attempt=attempt,
                                            confirmation_status=state,
                                            violations=types or ["Shoulders", "Knees"])
@@ -77,7 +79,7 @@ class NotificationTests(TransactionTestCase):
         self.assertFalse(save_violation(second.pk))
         self.assertFalse(save_violation(first.pk))
         self.assertEqual(ViolationReport.objects.count(), 1)
-        self.assertEqual(Violation.objects.count(), 2)  # Existing per-type schema.
+        self.assertEqual(Violation.objects.count(), 1)  # One offense, multiple types.
         self.assertEqual(ViolationEmail.objects.count(), 1)
         self.assertEqual(EntryLog.objects.count(), 2)  # Entry still proceeds.
         second.refresh_from_db()
@@ -108,7 +110,7 @@ class NotificationTests(TransactionTestCase):
         self.assertEqual(ViolationReport.objects.count(), 2)
 
     def test_existing_report_blocks_new_record_without_backfill_email(self):
-        ViolationReport.objects.create(student=self.student, violation_type="Existing")
+        ViolationReport.objects.create(student=self.student, violation_type="Existing", confirmed_entry=True)
         self.assertFalse(save_violation(self.inspection().pk))
         self.assertFalse(ViolationEmail.objects.exists())
 
@@ -123,7 +125,7 @@ class NotificationTests(TransactionTestCase):
         inspections = [self.inspection(state="PENDING"), self.inspection(state="REJECTED"),
                        self.inspection(entered=False)]
         cancelled = self.inspection()
-        GateCycle.objects.create(attempt=cancelled.attempt, outcome="WALKED_AWAY")
+        GateCycle.objects.filter(attempt=cancelled.attempt).update(outcome="WALKED_AWAY")
         for inspection in inspections + [cancelled]:
             self.assertFalse(save_violation(inspection.pk))
         self.assertFalse(ViolationEmail.objects.exists())
@@ -250,7 +252,7 @@ class NotificationTests(TransactionTestCase):
         self.assertEqual(ViolationEmail.objects.count(), 1)
 
     def test_ai_upload_and_review_api_queue_only_once_after_confirmation(self):
-        attempt = AccessAttempt.objects.create(student=self.student, entered=True)
+        attempt = AccessAttempt.objects.create(student=self.student, entered=True, gate_opened=True)
         payload = {"student_number": self.student.student_number, "attempt_id": attempt.pk,
                    "status": "VIOLATION", "violations": ["Knees"]}
         response = self.client.post("/api/students/ai-result/", payload, content_type="application/json")
@@ -259,22 +261,22 @@ class NotificationTests(TransactionTestCase):
         self.assertTrue(self.client.post("/api/students/ai-result/", payload,
                                         content_type="application/json").json()["ignored"])
         review = {"inspection_id": response.json()["inspection_id"], "decision": "YES"}
-        self.assertEqual(self.client.post("/api/students/ai-inspection/review/", review).status_code, 200)
-        self.assertEqual(self.client.post("/api/students/ai-inspection/review/", review).status_code, 400)
-        self.assertEqual(ViolationEmail.objects.count(), 1)
-        self.assertEqual(ViolationReport.objects.count(), 1)
+        self.assertEqual(self.client.post("/api/students/ai-inspection/review/", review).status_code, 409)
+        self.assertEqual(self.client.post("/api/students/ai-inspection/review/", review).status_code, 409)
+        self.assertEqual(ViolationEmail.objects.count(), 0)
+        self.assertEqual(ViolationReport.objects.count(), 0)
         self.assertEqual(mail.outbox, [])
 
     def test_pass_and_rejected_api_results_never_queue(self):
-        attempt = AccessAttempt.objects.create(student=self.student, entered=True)
+        attempt = AccessAttempt.objects.create(student=self.student, entered=True, gate_opened=True)
         response = self.client.post("/api/students/ai-result/", {
             "student_number": self.student.student_number, "attempt_id": attempt.pk, "status": "PASS",
         }, content_type="application/json")
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 201)
         inspection = self.inspection(state="PENDING")
         response = self.client.post("/api/students/ai-inspection/review/", {
             "inspection_id": inspection.pk, "decision": "NO",
         })
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 409)
         self.assertFalse(ViolationEmail.objects.exists())
         self.assertFalse(ViolationReport.objects.exists())

@@ -10,6 +10,7 @@ from django.db import connection
 from django.utils import timezone
 
 from .models import ViolationEmail
+from .offenses import offense_counts
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +60,15 @@ def deliver_notification(notification_id):
         occurred = timezone.localtime(notice.report.report_time, timezone.get_default_timezone())
         evidence_text = ("Please see the attached image for the recorded evidence."
                          if attachment else "No evidence image was available for this notification.")
+        counts = offense_counts(student.pk)
         body = (
             f"Dear {student.full_name or student.student_number},\n\n"
             "A dress-code violation was recorded during your campus entry.\n\n"
             f"Student Number: {student.student_number}\n"
             f"Violation: {notice.report.violation_type}\n"
             f"Date/Time: {occurred:%Y-%m-%d %H:%M:%S %Z}\n\n"
+            f"Current Minor Offenses: {counts['total_minor_offenses']}\n"
+            f"Equivalent Major Offenses: {counts['equivalent_major_offenses']}\n\n"
             f"{evidence_text}\n\n"
             "This is an automated notification from the SHESEETVAI system."
         )

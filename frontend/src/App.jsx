@@ -1,5 +1,9 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
+import Settings from "./pages/Settings";
+import EmailNotifications from "./pages/EmailNotifications";
+import Students from "./pages/Students";
+import StudentProfile from "./pages/StudentProfile";
 import ScanHistory from "./pages/ScanHistory";
 import StudentPage from "./pages/StudentPage";
 import Login from "./pages/Login";
@@ -13,6 +17,10 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+        <Route path="/email-notifications" element={<ProtectedRoute><EmailNotifications /></ProtectedRoute>} />
+        <Route path="/students" element={<ProtectedRoute><Students /></ProtectedRoute>} />
+        <Route path="/students/:studentNumber" element={<ProtectedRoute><StudentProfile /></ProtectedRoute>} />
 
         {/* Student Scanner */}
         <Route

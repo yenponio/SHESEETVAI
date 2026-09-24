@@ -1,3 +1,4 @@
+import AppShell from "./AppShell";
 import { Navigate } from "react-router-dom";
 
 function ProtectedRoute({ children }) {
@@ -7,7 +8,7 @@ function ProtectedRoute({ children }) {
     return <Navigate to="/osa" replace />;
   }
 
-  return children;
+  return <AppShell>{children}</AppShell>;
 }
 
 export default ProtectedRoute;

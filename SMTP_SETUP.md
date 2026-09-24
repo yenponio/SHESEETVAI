@@ -37,12 +37,14 @@ missing evidence sends a notice without an attachment. Missing/invalid student
 email skips sending without blocking record creation or entry.
 
 `students.gate.save_violation()` remains the only application finalization point.
-It requires OSA CONFIRMED plus `AccessAttempt.entered`, and excludes cancelled
+See `WORKFLOW_UPDATE.md` for the adviser-approved three-decision workflow.
+It requires OSA CONFIRMED_ALLOW, acknowledged `gate_opened`, `AccessAttempt.entered`,
+and the matching sensor-confirmed ENTERED gate cycle, and excludes cancelled
 passages. The first finalized report on each Asia/Manila calendar day creates
-one `ViolationReport`, the existing per-type `Violation` rows, and one new
+one official `ViolationReport`, one `Violation` containing all detected types, and one new
 `ViolationEmail` queue row. Multiple types in that first inspection share one
 notice. A later scan with any violation type that day creates no additional
-report, per-type rows, or notice; its AI review, entry log and gate cycle continue.
+report, violation row, or notice; its AI review, entry log and gate cycle continue.
 The later inspection is marked `recorded=True` to mean finalization was handled,
 so it cannot be replayed tomorrow to create a delayed duplicate.
 
@@ -50,7 +52,7 @@ The date is the report creation date, consistent with existing Records/Dashboard
 not the initial scan or AI capture date. A new confirmed entry after local
 midnight can create the next day's report. Existing controller write locking
 serializes concurrent HTTP/USB finalization, including on SQLite. Historical
-reports also suppress another report for that date. Historical duplicates are
+confirmed-entry reports also suppress another report for that date. Historical duplicates are
 not removed, and historical records are not emailed. Direct ORM/admin creation
 is unchanged and does not send mail; callers must use the existing finalization
 service to obtain its daily duplicate protection.
@@ -85,3 +87,16 @@ images, never live student recipients. Coverage includes byte-for-byte JPG/PNG
 attachments, repeat reviews, same-day/different-student rules, Manila midnight,
 transaction rollback, absent email/images, SMTP failure, concurrent finalization,
 concurrent delivery claims, and the existing gate/records tests.
+
+## Offense totals and denied entry
+
+Only `ViolationReport.confirmed_entry=True` contributes to official totals.
+Historical per-type Violation rows remain stored and are not counted separately.
+Current Minor Offenses is the total official report count; Equivalent Major
+Offenses is that count divided by 3 using integer division. Both appear in mail
+and Records evidence details. Totals never reset after a major equivalent.
+
+DENY leaves the gate closed and creates no official report, Violation or email.
+NO allows normal sensor-confirmed entry without an offense. AI PASS also waits
+for OSA. YES queues opening and waits for actual entry before recording anything.
+Mail is delivered by the worker only after the offense transaction has committed.

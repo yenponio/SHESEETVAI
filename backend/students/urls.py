@@ -14,9 +14,13 @@ from .views import (
 from .dashboard import dashboard_data
 from .records import records_data, school_records
 from .gate_views import gate_attempt_status
+from .ui_data import audit_data, notification_data, system_status
 
 
 urlpatterns = [
+    path("audit/", audit_data, name="audit-data"),
+    path("notifications/", notification_data, name="notification-data"),
+    path("system-status/", system_status, name="system-status"),
     path("gate/attempts/<int:attempt_id>/", gate_attempt_status, name="gate-attempt-status"),
 
     # =====================================================

@@ -63,3 +63,7 @@ backend/media/
 .env.*
 !.env.example
 !.env.sample
+
+# Browser verification artifacts
+frontend/test-results/
+frontend/playwright-report/

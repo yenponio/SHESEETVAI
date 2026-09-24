@@ -1,18 +1,4 @@
-import "../../styles/Dashboard.css";
-
-function StatCard({ title, value, icon }) {
-  return (
-    <div className="stat-card">
-      <div className="stat-icon">
-        {icon}
-      </div>
-
-      <div className="stat-content">
-        <h4>{title}</h4>
-        <h2>{value}</h2>
-      </div>
-    </div>
-  );
+import { Icon } from "../UI";
+export default function StatCard({ title, value, icon, help }) {
+  return <div className="card h-100"><div className="card-body stat-card"><span className="stat-icon"><Icon name={icon} /></span><div><p className="stat-label">{title}</p><div className="stat-value">{value ?? "Unavailable"}</div>{help && <p className="stat-help">{help}</p>}</div></div></div>;
 }
-
-export default StatCard;

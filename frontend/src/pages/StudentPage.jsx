@@ -1,10 +1,12 @@
-import React, {
+import {
   useState,
   useEffect,
-  useRef
+  useRef,
+  useCallback
 } from "react";
 
-import "../App.css";
+import { Link } from "react-router-dom";
+import { StatusBadge, Icon, EmptyState, Detail } from "../components/UI";
 import useGateCycle, { gateCycleFinished, gateMessage } from "../hooks/useGateCycle";
 
 
@@ -29,23 +31,29 @@ export default function StudentPage() {
   const [student, setStudent] =
     useState(null);
 
-  const [cameraActive, setCameraActive] =
+  const [cameraRunning, setCameraActive] =
     useState(false);
 
   const [cameraSession, setCameraSession] =
     useState(0);
 
-  const [scanStatus, setScanStatus] =
+  const [reportedScanStatus, setScanStatus] =
     useState("WAITING");
 
-  const [violations, setViolations] =
+  const [detectedViolations, setViolations] =
     useState([]);
+
+  const reviewStatus = gate.cycle?.confirmation_status;
+  const reviewedLabel = { CONFIRMED_ALLOW: "VIOLATION CONFIRMED", REJECTED: "CLEARED", CONFIRMED_DENY: "ENTRY DENIED" }[reviewStatus];
+  const scanStatus = reviewedLabel || reportedScanStatus;
+  const cameraActive = cameraRunning && !reviewedLabel;
+  const violations = reviewStatus === "REJECTED" ? [] : detectedViolations;
 
   const barcodeBuffer =
     useRef("");
 
   const lastKeyTime =
-    useRef(Date.now());
+    useRef(0);
 
   const resettingRef =
     useRef(false);
@@ -82,7 +90,7 @@ export default function StudentPage() {
   // CLEAR STUDENT PAGE
   // =====================================================
 
-  const clearStudentPage = () => {
+  const clearStudentPage = useCallback(() => {
     activeAttemptRef.current = null;
     hardwareGateRef.current = false;
     gateResettingRef.current = false;
@@ -133,7 +141,7 @@ export default function StudentPage() {
       "System ready for next ID scan."
     );
 
-  };
+  }, []);
 
 
   // =====================================================
@@ -147,7 +155,7 @@ export default function StudentPage() {
   //
   // =====================================================
 
-  const prepareNextStudent = async () => {
+  const prepareNextStudent = useCallback(async () => {
 
     console.log(
       "Preparing system for next student..."
@@ -210,14 +218,14 @@ export default function StudentPage() {
       "READY FOR NEXT ATTEMPT"
     );
 
-  };
+  }, [clearStudentPage]);
 
 
   // =====================================================
   // START CAMERA
   // =====================================================
 
-  const startCamera = async (
+  const startCamera = useCallback(async (
     studentData,
     attemptId
   ) => {
@@ -320,14 +328,14 @@ export default function StudentPage() {
 
     }
 
-  };
+  }, []);
 
 
   // =====================================================
   // STOP CAMERA
   // =====================================================
 
-  const stopCamera = async () => {
+  const stopCamera = useCallback(async () => {
 
     try {
 
@@ -351,14 +359,14 @@ export default function StudentPage() {
 
     setCameraActive(false);
 
-  };
+  }, []);
 
 
   // =====================================================
   // DISPLAY STUDENT
   // =====================================================
 
-  const displayStudent = async (
+  const displayStudent = useCallback(async (
     studentData,
     attemptId,
     usesHardwareGate = false
@@ -412,7 +420,7 @@ export default function StudentPage() {
 
     }
 
-  };
+  }, [startCamera]);
 
 
   // =====================================================
@@ -522,41 +530,9 @@ export default function StudentPage() {
         // PASS
         // ===============================================
 
-        if (
-          data.status ===
-          "PASS"
-        ) {
-
-          setScanStatus(
-            "PASS"
-          );
-
-
+        if (data.status === "PASS") {
+          setScanStatus("AWAITING OSA CONFIRMATION");
           setViolations([]);
-
-
-          // Prevent multiple timers
-          if (
-            !resettingRef.current
-          ) {
-
-            resettingRef.current =
-              true;
-
-
-            if (!hardwareGateRef.current) {
-setTimeout(
-              async () => {
-
-                await prepareNextStudent();
-
-              },
-              2500
-            );
-        }
-
-          }
-
         }
 
 
@@ -722,12 +698,12 @@ setTimeout(
         }
 
 
-        else {
-
-          return;
-
+        else if (decisionData.decision === "DENY") {
+          osaDecisionHandledRef.current = true;
+          setCameraActive(false);
+          setScanStatus("ENTRY DENIED");
         }
-
+        else { return; }
 
         // ===============================================
         // SHOW RESULT THEN PREPARE ATTEMPT 2
@@ -774,8 +750,17 @@ setTimeout(
 
     };
 
-  }, [student]);
+  }, [student, prepareNextStudent]);
 
+
+  useEffect(() => {
+    const status = gate.cycle?.confirmation_status;
+    const label = { CONFIRMED_ALLOW: "VIOLATION CONFIRMED", REJECTED: "CLEARED",
+      CONFIRMED_DENY: "ENTRY DENIED" }[status];
+    if (label) {
+      osaDecisionHandledRef.current = true;
+    }
+  }, [gate.cycle?.confirmation_status]);
 
   useEffect(() => {
     if (!hardwareGate || gateResettingRef.current ||
@@ -783,9 +768,10 @@ setTimeout(
     gateResettingRef.current = true;
     setGateNotice(gate.cycle.outcome === "ENTERED"
       ? "Entry confirmed. Ready for the next ID."
+      : gate.cycle.outcome === "DENIED" ? "Entry denied by OSA. No official offense recorded."
       : "Entry cancelled. No entry or final violation recorded.");
     prepareNextStudent();
-  }, [hardwareGate, gate.cycle, scanStatus]);
+  }, [hardwareGate, gate.cycle, scanStatus, prepareNextStudent]);
 
 
   // =====================================================
@@ -998,7 +984,7 @@ setTimeout(
 
     };
 
-  }, [student]);
+  }, [student, displayStudent, clearStudentPage, stopCamera]);
 
 
   // =====================================================
@@ -1068,110 +1054,11 @@ setTimeout(
 
 
   // =====================================================
-  // STATUS CLASS
-  // =====================================================
-
-  const getStatusClass = () => {
-
-    if (
-      scanStatus ===
-      "VIOLATION CONFIRMED"
-    ) {
-
-      return "approved violation-confirmed";
-
-    }
-
-
-    if (
-      scanStatus ===
-      "AWAITING OSA CONFIRMATION"
-    ) {
-
-      return "approved awaiting";
-
-    }
-
-
-    return "approved";
-
-  };
-
-
-  // =====================================================
-  // STATUS COLOR
-  // =====================================================
-
-  const getStatusStyle = () => {
-
-    // RED
-    if (
-      scanStatus ===
-      "VIOLATION CONFIRMED"
-    ) {
-
-      return {
-
-        backgroundColor:
-          "#c21e1e",
-
-        color:
-          "white",
-
-      };
-
-    }
-
-
-    // ORANGE
-    if (
-      scanStatus ===
-      "AWAITING OSA CONFIRMATION"
-    ) {
-
-      return {
-
-        backgroundColor:
-          "#f0a000",
-
-        color:
-          "white",
-
-      };
-
-    }
-
-
-    // GREEN
-    if (
-      scanStatus ===
-      "CLEARED"
-    ) {
-
-      return {
-
-        backgroundColor:
-          "#18a848",
-
-        color:
-          "white",
-
-      };
-
-    }
-
-
-    // NORMAL GREEN FROM CSS
-    return {};
-
-  };
-
-
-  // =====================================================
   // CAMERA MESSAGE
   // =====================================================
 
   const getCameraTitle = () => {
+    if (scanStatus === "ENTRY DENIED") return "Entry Denied";
 
     if (
       scanStatus ===
@@ -1220,6 +1107,7 @@ setTimeout(
 
 
   const getCameraMessage = () => {
+    if (scanStatus === "ENTRY DENIED") return "Gate stays closed. No official offense recorded.";
 
     if (
       scanStatus ===
@@ -1281,358 +1169,13 @@ setTimeout(
   // PAGE
   // =====================================================
 
-  return (
-
-    <div className="app">
-
-
-      {/* =================================================
-          HEADER
-      ================================================= */}
-
-      <header className="header">
-
-
-        <div className="headerLeft">
-
-          <div>
-
-            <h1>
-              SheSeeTV AI
-            </h1>
-
-            <p>
-              Dress Code Compliance Scanner
-            </p>
-
-          </div>
-
-        </div>
-
-
-        <div className="dateTime">
-
-          {formattedDate}
-
-          {" | "}
-
-          {formattedTime}
-
-        </div>
-
-
-      </header>
-
-
-
-      {/* =================================================
-          MAIN
-      ================================================= */}
-
-      <main className="mainLayout">
-
-
-        {/* =================================================
-            CAMERA
-        ================================================= */}
-
-        <section className="cameraCard">
-
-
-          <div className="cameraBox">
-
-
-            {cameraActive ? (
-
-              <img
-
-                key={cameraSession}
-
-                src={`http://127.0.0.1:5000/video_feed?session=${cameraSession}`}
-
-                className="cameraFeed"
-
-                alt="Camera Feed"
-
-                onLoad={() => {
-
-                  console.log(
-                    "Fresh camera stream loaded:",
-                    cameraSession
-                  );
-
-                }}
-
-                onError={() => {
-
-                  console.log(
-                    "Camera stream ended."
-                  );
-
-                }}
-
-              />
-
-            ) : (
-
-              <div className="cameraPlaceholder">
-
-
-                <h2>
-
-                  {getCameraTitle()}
-
-                </h2>
-
-
-                <p>
-
-                  {getCameraMessage()}
-
-                </p>
-
-
-              </div>
-
-            )}
-
-
-          </div>
-
-
-        </section>
-
-
-
-        {/* =================================================
-            RIGHT PANEL
-        ================================================= */}
-
-        <aside className="rightPanel">
-          {(hardwareGate || gateNotice) && (
-            <div className="resultCard" role="status" aria-live="polite">
-              <h2>Gate status</h2>
-              <p>{hardwareGate ? (gate.error || gateMessage(gate.cycle)) : gateNotice}</p>
-            </div>
-          )}
-
-
-
-          {/* =================================================
-              STUDENT ID
-          ================================================= */}
-
-          <div className="infoCard">
-
-
-            <h2 className="studentIdTitle">
-
-              Student ID
-
-            </h2>
-
-
-            <div className="studentIdContainer">
-
-
-              {student ? (
-
-                <div className="idPhoto scanned">
-
-
-                  {student.photo ? (
-
-                    <img
-                      src={student.photo}
-                      alt="Student ID"
-                    />
-
-                  ) : (
-
-                    <div>
-
-                      NO ID PHOTO
-
-                    </div>
-
-                  )}
-
-
-                </div>
-
-              ) : (
-
-                <div className="idPhoto">
-
-                  WAITING FOR SCAN
-
-                </div>
-
-              )}
-
-
-            </div>
-
-
-          </div>
-
-
-
-          {/* =================================================
-              DRESS CODE STATUS
-          ================================================= */}
-
-          <div className="resultCard">
-
-
-            <h2>
-
-              Dress Code Status
-
-            </h2>
-
-
-            <div
-              className={
-                getStatusClass()
-              }
-              style={
-                getStatusStyle()
-              }
-            >
-
-              {scanStatus}
-
-            </div>
-
-
-            <div className="violationBox">
-
-
-              <h3>
-
-                Violations
-
-              </h3>
-
-
-              {/* =============================================
-                  WAITING
-              ============================================= */}
-
-              {!student && (
-
-                <p>
-
-                  Waiting for student
-
-                </p>
-
-              )}
-
-
-              {/* =============================================
-                  SCANNING
-              ============================================= */}
-
-              {student &&
-              scanStatus ===
-                "SCANNING..." && (
-
-                <p>
-
-                  Checking...
-
-                </p>
-
-              )}
-
-
-              {/* =============================================
-                  POSSIBLE / CONFIRMED VIOLATION
-              ============================================= */}
-
-              {student &&
-              (
-                scanStatus ===
-                  "AWAITING OSA CONFIRMATION" ||
-
-                scanStatus ===
-                  "VIOLATION CONFIRMED"
-              ) && (
-
-                <div>
-
-
-                  {violations.length > 0 ? (
-
-                    violations.map(
-                      (
-                        violation,
-                        index
-                      ) => (
-
-                        <p key={index}>
-
-                          {violation}
-
-                        </p>
-
-                      )
-                    )
-
-                  ) : (
-
-                    <p>
-
-                      Possible violation detected
-
-                    </p>
-
-                  )}
-
-
-                </div>
-
-              )}
-
-
-              {/* =============================================
-                  PASS / CLEARED
-              ============================================= */}
-
-              {student &&
-              (
-                scanStatus ===
-                  "PASS" ||
-
-                scanStatus ===
-                  "CLEARED"
-              ) && (
-
-                <p>
-
-                  None
-
-                </p>
-
-              )}
-
-
-            </div>
-
-
-          </div>
-
-
-        </aside>
-
-
-      </main>
-
-
-    </div>
-
-  );
-
+  return <div className="kiosk-shell container-fluid">
+    <header className="kiosk-header"><div className="d-flex align-items-center gap-3"><span className="brand-mark"><Icon name="shield-check" /></span><div><h1>SHESEETVAI</h1><p className="small text-muted mb-0">Student dress-code scanner</p></div></div><div className="d-flex flex-wrap align-items-center gap-3"><span className="small text-muted">{formattedDate} | {formattedTime}</span><Link className="btn btn-outline-primary" to="/osa">OSA workspace</Link></div></header>
+    <main className="row g-4"><section className="col-lg-8"><div className="card"><div className="card-body"><div className="d-flex justify-content-between align-items-center gap-2 mb-3"><h2 className="mb-0">Live camera</h2><StatusBadge icon="camera-video">{cameraActive ? "Inspecting" : "Camera idle"}</StatusBadge></div>
+      <div className="media-frame" id="camera-preview">{cameraActive ? <img key={cameraSession} src={`http://127.0.0.1:5000/video_feed?session=${cameraSession}`} alt="Live dress-code inspection camera" /> : <EmptyState icon="upc-scan" title={getCameraTitle()} message={getCameraMessage()} />}</div>
+      <div className="media-caption"><span><Icon name="upc-scan" />Scan a registered ID to begin</span><span>Wait for the OSA decision before entering</span></div></div></div></section>
+    <aside className="col-lg-4"><div className="card mb-3"><div className="card-body"><h2>Student identity</h2>{student ? <><div className="student-review-heading">{student.photo && <img src={student.photo} alt={`ID of ${student.name}`} />}<div><h3>{student.name}</h3><p className="text-muted small mb-0">{student.id}</p></div></div><dl className="detail-list"><Detail label="School">{student.college}</Detail><Detail label="Attempt">{activeAttemptId}</Detail></dl></> : <EmptyState icon="person-badge" title="Waiting for ID scan" message="Use the connected barcode scanner." />}</div></div>
+    <div className="card mb-3"><div className="card-body"><h2>Inspection status</h2><StatusBadge icon="clipboard-check" strong>{scanStatus}</StatusBadge><div className="mt-3 small">{violations.length ? <ul className="ps-3 mb-0">{violations.map((item,index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : <p className="text-muted mb-0">{student ? "No suspected types reported." : "Ready for a new student."}</p>}</div></div></div>
+    <div className="card"><div className="card-body" role="status" aria-live="polite"><h2>Gate & passage</h2><p className="small mb-0">{hardwareGate ? gate.error || gateMessage(gate.cycle) : gateNotice || "No active gate attempt."}</p>{gate.cycle && <p className="small text-muted mt-2 mb-0">Sensor outcome: {gate.cycle.outcome.replaceAll("_", " ")}</p>}</div></div></aside></main>
+  </div>;
 }

@@ -1,5 +1,6 @@
 """Shared source for Records and Dashboard: one row per violation report."""
 from django.http import JsonResponse
+from django.db.models import Count
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 
@@ -29,7 +30,8 @@ def college_code(value):
 
 def violation_records(school=None, request=None):
     # Do not merge the per-type Violation table or infer reports from scans.
-    reports = ViolationReport.objects.select_related("student", "inspection").order_by("-report_time", "-pk")
+    reports = ViolationReport.objects.filter(confirmed_entry=True).select_related("student", "inspection", "email_notification").order_by("-report_time", "-pk")
+    totals = dict(ViolationReport.objects.filter(confirmed_entry=True).values("student_id").annotate(total=Count("pk")).values_list("student_id", "total"))
     records = []
     for report in reports:
         student = report.student
@@ -42,6 +44,11 @@ def violation_records(school=None, request=None):
         if evidence_url and request is not None:
             evidence_url = request.build_absolute_uri(evidence_url)
         records.append({
+            "total_minor_offenses": totals[student.pk],
+            "equivalent_major_offenses": totals[student.pk] // 3,
+            "osa_decision": report.inspection.confirmation_status if report.inspection else None,
+            "confirmed_entry": report.confirmed_entry,
+            "email_status": getattr(report, "email_notification", None).status if getattr(report, "email_notification", None) else None,
             "evidence_image": evidence_url,
             "id": report.pk,
             "studentNumber": student.student_number,

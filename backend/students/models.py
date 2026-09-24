@@ -229,13 +229,15 @@ class ViolationReport(models.Model):
 class AIInspection(models.Model):
 
     STATUS_CHOICES = [
+        ("CONFIRMED_ALLOW", "Confirmed Violation - Allow Entry"),
+        ("CONFIRMED_DENY", "Confirmed Violation - Deny Entry"),
         (
             "PENDING",
             "Pending Confirmation"
         ),
         (
             "CONFIRMED",
-            "Confirmed Violation"
+            "Confirmed Violation (Historical)"
         ),
         (
             "REJECTED",
@@ -359,7 +361,7 @@ class GateCycle(models.Model):
         AccessAttempt, on_delete=models.CASCADE, primary_key=True,
         related_name="gate_cycle",
     )
-    phase = models.CharField(max_length=20, default="QUEUED")
+    phase = models.CharField(max_length=20, default="WAITING_OSA")
     outcome = models.CharField(max_length=20, default="PENDING")
     bridge_id = models.CharField(max_length=64, blank=True)
     message = models.CharField(max_length=160, blank=True)
